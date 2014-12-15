@@ -113,5 +113,25 @@ Bugfixes
   (:ticket:`23920`).
 
 * Fixed index creation by the migration infrastructure, particularly when
-  dealing with PostgreSQL specific {text|varchar}_pattern_ops indexes
+  dealing with PostgreSQL specific ``{text|varchar}_pattern_ops`` indexes
   (:ticket:`23954`).
+
+* Fixed bug in ``makemigrations`` that created broken migration files when
+  dealing with multiple table inheritance and inheriting from more than one
+  model (:ticket:`23956`).
+
+* Fixed a crash when a ``MultiValueField`` has invalid data (:ticket:`23674`).
+
+* Fixed a crash in the admin when using "Save as new" and also deleting a
+  related inline (:ticket:`23857`).
+
+* Always converted ``related_name`` to text (unicode), since that is required
+  on Python 3 for interpolation. Removed conversion of ``related_name`` to text
+  in migration deconstruction (:ticket:`23455` and :ticket:`23982`).
+
+* Enlarged the sizes of tablespaces which are created by default for testing
+  on Oracle (the main tablespace was increased from 200M to 300M and the
+  temporary tablespace from 100M to 150M). This was required to accomodate
+  growth in Django's own test suite (:ticket:`23969`).
+
+* Fixed timesince filter translations in Korean (:ticket:`23989`).
