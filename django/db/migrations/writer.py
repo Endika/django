@@ -18,6 +18,7 @@ from django.utils import datetime_safe, six
 from django.utils.encoding import force_text
 from django.utils.functional import Promise
 from django.utils.timezone import utc
+from django.utils.version import get_docs_version
 
 
 COMPILED_REGEX_TYPE = type(re.compile(''))
@@ -223,13 +224,7 @@ class MigrationWriter(object):
 
     @classmethod
     def serialize_deconstructed(cls, path, args, kwargs):
-        module, name = path.rsplit(".", 1)
-        if module == "django.db.models":
-            imports = {"from django.db import models"}
-            name = "models.%s" % name
-        else:
-            imports = {"import %s" % module}
-            name = path
+        name, imports = cls._serialize_path(path)
         strings = []
         for arg in args:
             arg_string, arg_imports = cls.serialize(arg)
@@ -240,6 +235,17 @@ class MigrationWriter(object):
             imports.update(arg_imports)
             strings.append("%s=%s" % (kw, arg_string))
         return "%s(%s)" % (name, ", ".join(strings)), imports
+
+    @classmethod
+    def _serialize_path(cls, path):
+        module, name = path.rsplit(".", 1)
+        if module == "django.db.models":
+            imports = {"from django.db import models"}
+            name = "models.%s" % name
+        else:
+            imports = {"import %s" % module}
+            name = path
+        return name, imports
 
     @classmethod
     def serialize(cls, value):
@@ -300,6 +306,8 @@ class MigrationWriter(object):
         # Times
         elif isinstance(value, datetime.time):
             value_repr = repr(value)
+            if isinstance(value, datetime_safe.time):
+                value_repr = "datetime.%s" % value_repr
             return value_repr, {"import datetime"}
         # Settings references
         elif isinstance(value, SettingsReference):
@@ -344,6 +352,13 @@ class MigrationWriter(object):
                     return value.__name__, set()
                 else:
                     return "%s.%s" % (module, value.__name__), {"import %s" % module}
+        elif isinstance(value, models.manager.BaseManager):
+            as_manager, manager_path, qs_path, args, kwargs = value.deconstruct()
+            if as_manager:
+                name, imports = cls._serialize_path(qs_path)
+                return "%s.as_manager()" % name, imports
+            else:
+                return cls.serialize_deconstructed(manager_path, args, kwargs)
         # Anything that knows how to deconstruct itself.
         elif hasattr(value, 'deconstruct'):
             return cls.serialize_deconstructed(*value.deconstruct())
@@ -375,8 +390,8 @@ class MigrationWriter(object):
                     "declared and used in the same class body). Please move "
                     "the function into the main module body to use migrations.\n"
                     "For more information, see "
-                    "https://docs.djangoproject.com/en/dev/topics/migrations/#serializing-values"
-                    % (value.__name__, module_name))
+                    "https://docs.djangoproject.com/en/%s/topics/migrations/#serializing-values"
+                    % (value.__name__, module_name, get_docs_version()))
             return "%s.%s" % (module_name, value.__name__), {"import %s" % module_name}
         # Other iterables
         elif isinstance(value, collections.Iterable):
@@ -405,8 +420,8 @@ class MigrationWriter(object):
         else:
             raise ValueError(
                 "Cannot serialize: %r\nThere are some values Django cannot serialize into "
-                "migration files.\nFor more, see https://docs.djangoproject.com/en/dev/"
-                "topics/migrations/#migration-serializing" % value
+                "migration files.\nFor more, see https://docs.djangoproject.com/en/%s/"
+                "topics/migrations/#migration-serializing" % (value, get_docs_version())
             )
 
 

@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 import datetime
 from decimal import Decimal
 import unittest
-import warnings
 
 from django import test
 from django import forms
@@ -21,14 +20,13 @@ from django.db.models.fields import (
 from django.db.models.fields.files import FileField, ImageField
 from django.utils import six
 from django.utils.functional import lazy
-from django.test.utils import override_settings
 
 from .models import (
-    Foo, Bar, Whiz, BigD, BigS, BigIntegerModel, Post, NullBooleanModel,
-    BooleanModel, PrimaryKeyCharModel, DataModel, Document, RenamedField,
-    DateTimeModel, VerboseNameField, FksToBooleans, FkToChar, FloatModel,
-    SmallIntegerModel, IntegerModel, PositiveSmallIntegerModel, PositiveIntegerModel,
-    WhizIter, WhizIterEmpty)
+    Bar, BigD, BigIntegerModel, BigS, BooleanModel, DataModel, DateTimeModel,
+    Document, FksToBooleans, FkToChar, FloatModel, Foo, GenericIPAddress,
+    IntegerModel, NullBooleanModel, PositiveIntegerModel, PositiveSmallIntegerModel,
+    Post, PrimaryKeyCharModel, RenamedField, SmallIntegerModel, VerboseNameField,
+    Whiz, WhizIter, WhizIterEmpty)
 
 
 class BasicFieldTests(test.TestCase):
@@ -183,11 +181,11 @@ class ForeignKeyTests(test.TestCase):
         fk_model_empty = FkToChar.objects.select_related('out').get(id=fk_model_empty.pk)
         self.assertEqual(fk_model_empty.out, char_model_empty)
 
-    @override_settings(INSTALLED_APPS=['django.contrib.auth', 'django.contrib.contenttypes', 'model_fields'])
     def test_warning_when_unique_true_on_fk(self):
         class FKUniqueTrue(models.Model):
             fk_field = models.ForeignKey(Foo, unique=True)
 
+        model = FKUniqueTrue()
         expected_warnings = [
             checks.Warning(
                 'Setting unique=True on a ForeignKey has the same effect as using a OneToOneField.',
@@ -196,11 +194,11 @@ class ForeignKeyTests(test.TestCase):
                 id='fields.W342',
             )
         ]
-        warnings = checks.run_checks()
+        warnings = model.check()
         self.assertEqual(warnings, expected_warnings)
 
     def test_related_name_converted_to_text(self):
-        rel_name = Bar._meta.get_field_by_name('a')[0].rel.related_name
+        rel_name = Bar._meta.get_field('a').rel.related_name
         self.assertIsInstance(rel_name, six.text_type)
 
 
@@ -690,6 +688,14 @@ class GenericIPAddressFieldTests(test.TestCase):
         form_field = model_field.formfield()
         self.assertRaises(ValidationError, form_field.clean, '127.0.0.1')
 
+    def test_null_value(self):
+        """
+        Null values should be resolved to None in Python (#24078).
+        """
+        GenericIPAddress.objects.create()
+        o = GenericIPAddress.objects.get()
+        self.assertIsNone(o.ip)
+
 
 class PromiseTest(test.TestCase):
     def test_AutoField(self):
@@ -800,16 +806,30 @@ class PromiseTest(test.TestCase):
             int)
 
     def test_IPAddressField(self):
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            lazy_func = lazy(lambda: '127.0.0.1', six.text_type)
-            self.assertIsInstance(
-                IPAddressField().get_prep_value(lazy_func()),
-                six.text_type)
-            lazy_func = lazy(lambda: 0, int)
-            self.assertIsInstance(
-                IPAddressField().get_prep_value(lazy_func()),
-                six.text_type)
+        lazy_func = lazy(lambda: '127.0.0.1', six.text_type)
+        self.assertIsInstance(
+            IPAddressField().get_prep_value(lazy_func()),
+            six.text_type)
+        lazy_func = lazy(lambda: 0, int)
+        self.assertIsInstance(
+            IPAddressField().get_prep_value(lazy_func()),
+            six.text_type)
+
+    def test_IPAddressField_deprecated(self):
+        class IPAddressModel(models.Model):
+            ip = IPAddressField()
+
+        model = IPAddressModel()
+        self.assertEqual(
+            model.check(),
+            [checks.Warning(
+                'IPAddressField has been deprecated. Support for it '
+                '(except in historical migrations) will be removed in Django 1.9.',
+                hint='Use GenericIPAddressField instead.',
+                obj=IPAddressModel._meta.get_field('ip'),
+                id='fields.W900',
+            )],
+        )
 
     def test_GenericIPAddressField(self):
         lazy_func = lazy(lambda: '127.0.0.1', six.text_type)

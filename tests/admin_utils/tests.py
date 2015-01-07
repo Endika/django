@@ -8,7 +8,6 @@ from django.contrib.admin import helpers
 from django.contrib.admin.utils import (display_for_field, flatten,
     flatten_fieldsets, label_for_field, lookup_field, NestedObjects)
 from django.contrib.admin.views.main import EMPTY_CHANGELIST_VALUE
-from django.contrib.sites.models import Site
 from django.db import models, DEFAULT_DB_ALIAS
 from django import forms
 from django.test import TestCase
@@ -16,7 +15,7 @@ from django.utils.formats import localize
 from django.utils.safestring import mark_safe
 from django.utils import six
 
-from .models import Article, Count, Event, Location, EventGuide, Vehicle, Car
+from .models import Site, Article, Count, Event, Location, EventGuide, Vehicle, Car
 
 
 class NestedObjectsTests(TestCase):
@@ -91,7 +90,7 @@ class NestedObjectsTests(TestCase):
         n.collect([Vehicle.objects.first()])
 
 
-class UtilTests(TestCase):
+class UtilsTests(TestCase):
     def test_values_from_lookup_field(self):
         """
         Regression test for #12654: lookup_field

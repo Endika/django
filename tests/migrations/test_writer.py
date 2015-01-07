@@ -7,12 +7,11 @@ import os
 import re
 import tokenize
 import unittest
-import warnings
 
 from django.core.validators import RegexValidator, EmailValidator
 from django.db import models, migrations
 from django.db.migrations.writer import MigrationWriter, SettingsReference
-from django.test import TestCase
+from django.test import TestCase, ignore_warnings
 from django.conf import settings
 from django.utils import datetime_safe, six
 from django.utils.deconstruct import deconstructible
@@ -21,6 +20,8 @@ from django.utils.timezone import get_default_timezone, utc, FixedOffset
 
 import custom_migration_operations.operations
 import custom_migration_operations.more_operations
+
+from .models import FoodQuerySet, FoodManager
 
 
 class TestModel1(object):
@@ -111,6 +112,10 @@ class WriterTests(TestCase):
         safe_date = datetime_safe.date(2014, 3, 31)
         string, imports = MigrationWriter.serialize(safe_date)
         self.assertEqual(string, repr(datetime.date(2014, 3, 31)))
+        self.assertEqual(imports, {'import datetime'})
+        safe_time = datetime_safe.time(10, 25)
+        string, imports = MigrationWriter.serialize(safe_time)
+        self.assertEqual(string, repr(datetime.time(10, 25)))
         self.assertEqual(imports, {'import datetime'})
         safe_datetime = datetime_safe.datetime(2014, 3, 31, 16, 4, 31)
         string, imports = MigrationWriter.serialize(safe_datetime)
@@ -282,6 +287,10 @@ class WriterTests(TestCase):
                     )
                 )
 
+    # Silence warning on Python 2: Not importing directory
+    # 'tests/migrations/migrations_test_apps/without_init_file/migrations':
+    # missing __init__.py
+    @ignore_warnings(category=ImportWarning)
     def test_migration_path(self):
         test_apps = [
             'migrations.migrations_test_apps.normal',
@@ -296,12 +305,7 @@ class WriterTests(TestCase):
                 migration = migrations.Migration('0001_initial', app.split('.')[-1])
                 expected_path = os.path.join(base_dir, *(app.split('.') + ['migrations', '0001_initial.py']))
                 writer = MigrationWriter(migration)
-                # Silence warning on Python 2: Not importing directory
-                # 'tests/migrations/migrations_test_apps/without_init_file/migrations':
-                # missing __init__.py
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=ImportWarning)
-                    self.assertEqual(writer.path, expected_path)
+                self.assertEqual(writer.path, expected_path)
 
     def test_custom_operation(self):
         migration = type(str("Migration"), (migrations.Migration,), {
@@ -351,3 +355,12 @@ class WriterTests(TestCase):
 
         string = MigrationWriter.serialize(models.CharField(default=DeconstructableInstances))[0]
         self.assertEqual(string, "models.CharField(default=migrations.test_writer.DeconstructableInstances)")
+
+    def test_serialize_managers(self):
+        self.assertSerializedEqual(models.Manager())
+        self.assertSerializedResultEqual(
+            FoodQuerySet.as_manager(),
+            ('migrations.models.FoodQuerySet.as_manager()', {'import migrations.models'})
+        )
+        self.assertSerializedEqual(FoodManager('a', 'b'))
+        self.assertSerializedEqual(FoodManager('x', 'y', c=3, d=4))

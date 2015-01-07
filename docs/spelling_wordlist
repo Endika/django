@@ -233,6 +233,9 @@ geolocalized
 geolocated
 geolocation
 geoquerysets
+georeference
+georeferenced
+georeferencing
 geospatial
 Geospatial
 Gettext
@@ -354,6 +357,7 @@ localhost
 localizable
 localtime
 Loïc
+loopback
 lorem
 lt
 lte
@@ -497,6 +501,7 @@ queryset
 querysets
 Querysets
 querystring
+queueing
 Quickstart
 quoteless
 Radziej
@@ -556,6 +561,7 @@ Shai
 shapefile
 shapefiles
 sharding
+showmigrations
 sid
 simultaneously
 sitemap
@@ -612,6 +618,7 @@ subpackages
 subqueries
 subquery
 subselect
+substr
 subtemplate
 subtemplates
 subviews
@@ -689,6 +696,7 @@ unmigrated
 unparseable
 unpickle
 unpickled
+unpickling
 unpythonic
 unregistration
 unrendered

@@ -6,7 +6,6 @@ import re
 import datetime
 import unittest
 
-from django.conf import settings, global_settings
 from django.core import mail
 from django.core.checks import Error
 from django.core.files import temp as tempfile
@@ -62,7 +61,6 @@ from .admin import site, site2, CityAdmin
 
 ERROR_MESSAGE = "Please enter the correct username and password \
 for a staff account. Note that both fields may be case-sensitive."
-ADMIN_VIEW_TEMPLATES_DIR = settings.TEMPLATE_DIRS + (os.path.join(os.path.dirname(upath(__file__)), 'templates'),)
 
 
 @override_settings(PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',),
@@ -81,7 +79,6 @@ class AdminViewBasicTestCase(TestCase):
         self.client.login(username='super', password='secret')
 
     def tearDown(self):
-        self.client.logout()
         formats.reset_format_cache()
 
     def assertContentBefore(self, response, text1, text2, failing_msg=None):
@@ -789,7 +786,24 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
         self.assertContains(response, '<a href="/my-site-url/">View site</a>')
 
 
-@override_settings(TEMPLATE_DIRS=ADMIN_VIEW_TEMPLATES_DIR)
+@override_settings(TEMPLATES=[{
+    'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    # Put this app's templates dir in DIRS to take precedence over the admin's
+    # templates dir.
+    'DIRS': [os.path.join(os.path.dirname(upath(__file__)), 'templates')],
+    'APP_DIRS': True,
+    'OPTIONS': {
+        'context_processors': [
+            'django.template.context_processors.debug',
+            'django.template.context_processors.i18n',
+            'django.template.context_processors.tz',
+            'django.template.context_processors.media',
+            'django.template.context_processors.static',
+            'django.contrib.auth.context_processors.auth',
+            'django.contrib.messages.context_processors.messages',
+        ],
+    },
+}])
 class AdminCustomTemplateTests(AdminViewBasicTestCase):
     def test_extended_bodyclass_template_change_form(self):
         """
@@ -876,9 +890,6 @@ class AdminViewFormUrlTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_change_form_URL_has_correct_value(self):
         """
         Tests whether change_view has form_url in response.context
@@ -908,9 +919,6 @@ class AdminJavaScriptTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_js_minified_only_if_debug_is_false(self):
         """
@@ -953,9 +961,6 @@ class SaveAsTests(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_save_as_duplication(self):
         """Ensure save as actually creates a new person"""
@@ -1086,6 +1091,9 @@ class AdminViewPermissionsTest(TestCase):
         change_user = User.objects.get(username='changeuser')
         change_user.user_permissions.add(get_perm(Article,
             get_permission_codename('change', opts)))
+        change_user2 = User.objects.get(username='nostaff')
+        change_user2.user_permissions.add(get_perm(Article,
+            get_permission_codename('change', opts)))
 
         # User who can delete Articles
         delete_user = User.objects.get(username='deleteuser')
@@ -1124,6 +1132,11 @@ class AdminViewPermissionsTest(TestCase):
         self.deleteuser_login = {
             REDIRECT_FIELD_NAME: '/test_admin/admin/',
             'username': 'deleteuser',
+            'password': 'secret',
+        }
+        self.nostaff_login = {
+            REDIRECT_FIELD_NAME: '/test_admin/has_permission_admin/',
+            'username': 'nostaff',
             'password': 'secret',
         }
         self.joepublic_login = {
@@ -1205,6 +1218,34 @@ class AdminViewPermissionsTest(TestCase):
         self.assertEqual(login.status_code, 200)
         form = login.context[0].get('form')
         self.assertEqual(form.errors['username'][0], 'This field is required.')
+
+    def test_login_has_permission(self):
+        # Regular User should not be able to login.
+        response = self.client.get('/test_admin/has_permission_admin/')
+        self.assertEqual(response.status_code, 302)
+        login = self.client.post('/test_admin/has_permission_admin/login/', self.joepublic_login)
+        self.assertEqual(login.status_code, 200)
+        self.assertContains(login, 'permission denied')
+
+        # User with permissions should be able to login.
+        response = self.client.get('/test_admin/has_permission_admin/')
+        self.assertEqual(response.status_code, 302)
+        login = self.client.post('/test_admin/has_permission_admin/login/', self.nostaff_login)
+        self.assertRedirects(login, '/test_admin/has_permission_admin/')
+        self.assertFalse(login.context)
+        self.client.get('/test_admin/has_permission_admin/logout/')
+
+        # Staff should be able to login.
+        response = self.client.get('/test_admin/has_permission_admin/')
+        self.assertEqual(response.status_code, 302)
+        login = self.client.post('/test_admin/has_permission_admin/login/', {
+            REDIRECT_FIELD_NAME: '/test_admin/has_permission_admin/',
+            'username': 'deleteuser',
+            'password': 'secret',
+        })
+        self.assertRedirects(login, '/test_admin/has_permission_admin/')
+        self.assertFalse(login.context)
+        self.client.get('/test_admin/has_permission_admin/logout/')
 
     def test_login_successfully_redirects_to_original_URL(self):
         response = self.client.get('/test_admin/admin/')
@@ -1700,9 +1741,6 @@ class AdminViewDeletedObjectsTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_nesting(self):
         """
         Objects should be nested to display the relationships that
@@ -1804,8 +1842,8 @@ class AdminViewDeletedObjectsTest(TestCase):
 
         """
         plot = Plot.objects.get(pk=3)
-        FunkyTag.objects.create(content_object=plot, name='hott')
-        should_contain = """<li>Funky tag: <a href="/test_admin/admin/admin_views/funkytag/1/">hott"""
+        tag = FunkyTag.objects.create(content_object=plot, name='hott')
+        should_contain = """<li>Funky tag: <a href="/test_admin/admin/admin_views/funkytag/%s/">hott""" % tag.id
         response = self.client.get('/test_admin/admin/admin_views/plot/%s/delete/' % quote(3))
         self.assertContains(response, should_contain)
 
@@ -1838,9 +1876,6 @@ class AdminViewStringPrimaryKeyTest(TestCase):
         self.client.login(username='super', password='secret')
         content_type_pk = ContentType.objects.get_for_model(ModelWithStringPrimaryKey).pk
         LogEntry.objects.log_action(100, content_type_pk, self.pk, self.pk, 2, change_message='Changed something')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_get_history_view(self):
         """
@@ -1991,9 +2026,6 @@ class SecureViewTests(TestCase):
     """
     fixtures = ['admin-views-users.xml']
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_secure_view_shows_login_if_not_logged_in(self):
         """
         Ensure that we see the admin login form.
@@ -2013,9 +2045,6 @@ class AdminViewUnicodeTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_unicode_edit(self):
         """
@@ -2068,9 +2097,6 @@ class AdminViewListEditable(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_inheritance(self):
         Podcast.objects.create(name="This Week in Django",
@@ -2447,9 +2473,6 @@ class AdminSearchTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_search_on_sibling_models(self):
         "Check that a search that mentions sibling models"
         response = self.client.get('/test_admin/admin/admin_views/recommendation/?q=bar')
@@ -2532,9 +2555,6 @@ class AdminInheritedInlinesTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_inline(self):
         "Ensure that inline models which inherit from a common parent are correctly handled by admin."
@@ -2620,9 +2640,6 @@ class AdminActionsTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_model_admin_custom_action(self):
         "Tests a custom action defined in a ModelAdmin method"
@@ -2895,9 +2912,6 @@ class TestCustomChangeList(TestCase):
         result = self.client.login(username='super', password='secret')
         self.assertEqual(result, True)
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_custom_changelist(self):
         """
         Validate that a custom ChangeList class can be used (#9749)
@@ -2922,9 +2936,6 @@ class TestInlineNotEditable(TestCase):
     def setUp(self):
         result = self.client.login(username='super', password='secret')
         self.assertEqual(result, True)
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_GET_parent_add(self):
         """
@@ -3201,9 +3212,6 @@ class AdminInlineFileUploadTest(TestCase):
         self.picture = Picture(name="Test Picture", image=filename, gallery=self.gallery)
         self.picture.save()
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_inline_file_upload_edit_validation_error_post(self):
         """
         Test that inline file uploads correctly display prior data (#10002).
@@ -3321,9 +3329,6 @@ class AdminInlineTests(TestCase):
         self.assertEqual(result, True)
         self.collector = Collector(pk=1, name='John Fowles')
         self.collector.save()
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_simple_inline(self):
         "A simple model can be saved as inlines"
@@ -3553,9 +3558,6 @@ class NeverCacheTests(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_admin_index(self):
         "Check the never-cache status of the main index"
         response = self.client.get('/test_admin/admin/')
@@ -3626,9 +3628,6 @@ class PrePopulatedTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_prepopulated_on(self):
         response = self.client.get('/test_admin/admin/admin_views/prepopulatedpost/add/')
@@ -3890,9 +3889,6 @@ class ReadonlyTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_readonly_get(self):
         response = self.client.get('/test_admin/admin/admin_views/post/add/')
         self.assertEqual(response.status_code, 200)
@@ -4001,9 +3997,6 @@ class LimitChoicesToInAdminTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_limit_choices_to_as_callable(self):
         """Test for ticket 2445 changes to admin."""
         threepwood = Character.objects.create(
@@ -4027,9 +4020,6 @@ class RawIdFieldsTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_limit_choices_to(self):
         """Regression test for 14880"""
@@ -4110,9 +4100,6 @@ class UserAdminTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_save_button(self):
         user_count = User.objects.count()
@@ -4213,9 +4200,6 @@ class GroupAdminTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_save_button(self):
         group_count = Group.objects.count()
         response = self.client.post('/test_admin/admin/auth/group/add/', {
@@ -4244,9 +4228,6 @@ class CSSTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_field_prefix_css_classes(self):
         """
@@ -4371,9 +4352,6 @@ class AdminDocsTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_tags(self):
         response = self.client.get('/test_admin/admin/doc/tags/')
 
@@ -4406,8 +4384,25 @@ class AdminDocsTest(TestCase):
         self.assertContains(response, '<li><a href="#built_in-add">add</a></li>', html=True)
 
 
-@override_settings(PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',),
-    ROOT_URLCONF="admin_views.urls")
+@override_settings(
+    PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',),
+    ROOT_URLCONF="admin_views.urls",
+    TEMPLATES=[{
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.tz',
+                'django.template.context_processors.media',
+                'django.template.context_processors.static',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    }],
+    USE_I18N=False,
+)
 class ValidXHTMLTests(TestCase):
     fixtures = ['admin-views-users.xml']
     urlbit = 'admin'
@@ -4415,15 +4410,6 @@ class ValidXHTMLTests(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
-    @override_settings(
-        TEMPLATE_CONTEXT_PROCESSORS=filter(
-            lambda t: t != 'django.core.context_processors.i18n',
-            global_settings.TEMPLATE_CONTEXT_PROCESSORS),
-        USE_I18N=False,
-    )
     def test_lang_name_present(self):
         response = self.client.get('/test_admin/%s/admin_views/' % self.urlbit)
         self.assertNotContains(response, ' lang=""')
@@ -4630,9 +4616,6 @@ class AdminViewLogoutTest(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_client_logout_url_can_be_used_to_login(self):
         response = self.client.get('/test_admin/admin/logout/')
         self.assertEqual(response.status_code, 200)
@@ -4658,9 +4641,6 @@ class AdminUserMessageTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def send_message(self, level):
         """
@@ -4717,9 +4697,6 @@ class AdminKeepChangeListFiltersTests(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def assertURLEqual(self, url1, url2):
         """
@@ -5044,9 +5021,6 @@ class AdminViewOnSiteTests(TestCase):
     def setUp(self):
         self.client.login(username='super', password='secret')
 
-    def tearDown(self):
-        self.client.logout()
-
     def test_add_view_form_and_formsets_run_validation(self):
         """
         Issue #20522
@@ -5164,9 +5138,6 @@ class InlineAdminViewOnSiteTest(TestCase):
 
     def setUp(self):
         self.client.login(username='super', password='secret')
-
-    def tearDown(self):
-        self.client.logout()
 
     def test_false(self):
         "Ensure that the 'View on site' button is not displayed if view_on_site is False"

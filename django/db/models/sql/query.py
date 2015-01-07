@@ -6,19 +6,20 @@ themselves do not have to (and could be backed by things other than SQL
 databases). The abstraction barrier only works one way: this module has to know
 all about the internals of models in order to get the information it needs.
 """
+from string import ascii_uppercase
+from itertools import count, product
 
 from collections import Mapping, OrderedDict
 import copy
+from itertools import chain
 import warnings
 
-from django.core.exceptions import FieldError
+from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.db import connections, DEFAULT_DB_ALIAS
+from django.db.models.aggregates import Count
 from django.db.models.constants import LOOKUP_SEP
 from django.db.models.expressions import Col, Ref
-from django.db.models.fields import FieldDoesNotExist
-from django.db.models.query_utils import Q, refs_aggregate
-from django.db.models.related import PathInfo
-from django.db.models.aggregates import Count
+from django.db.models.query_utils import PathInfo, Q, refs_aggregate
 from django.db.models.sql.constants import (QUERY_TERMS, ORDER_DIR, SINGLE,
         ORDER_PATTERN, SelectInfo, INNER, LOUTER)
 from django.db.models.sql.datastructures import (
@@ -31,6 +32,13 @@ from django.utils.encoding import force_text
 from django.utils.tree import Node
 
 __all__ = ['Query', 'RawQuery']
+
+
+def get_field_names_from_opts(opts):
+    return set(chain.from_iterable(
+        (f.name, f.attname) if f.concrete else (f.name,)
+        for f in opts.get_fields()
+    ))
 
 
 class RawQuery(object):
@@ -593,9 +601,9 @@ class Query(object):
             opts = orig_opts
             for name in parts[:-1]:
                 old_model = cur_model
-                source = opts.get_field_by_name(name)[0]
+                source = opts.get_field(name)
                 if is_reverse_o2o(source):
-                    cur_model = source.model
+                    cur_model = source.related_model
                 else:
                     cur_model = source.rel.to
                 opts = cur_model._meta
@@ -605,8 +613,11 @@ class Query(object):
                 if not is_reverse_o2o(source):
                     must_include[old_model].add(source)
                 add_to_dict(must_include, cur_model, opts.pk)
-            field, model, _, _ = opts.get_field_by_name(parts[-1])
-            if model is None:
+            field = opts.get_field(parts[-1])
+            is_reverse_object = field.auto_created and not field.concrete
+            model = field.related_model if is_reverse_object else field.model
+            model = model._meta.concrete_model
+            if model == opts.model:
                 model = cur_model
             if not is_reverse_o2o(field):
                 add_to_dict(seen, model, field)
@@ -618,10 +629,11 @@ class Query(object):
             # models.
             workset = {}
             for model, values in six.iteritems(seen):
-                for field, m in model._meta.get_fields_with_model():
+                for field in model._meta.fields:
                     if field in values:
                         continue
-                    add_to_dict(workset, m or model, field)
+                    m = field.model._meta.concrete_model
+                    add_to_dict(workset, m, field)
             for model, values in six.iteritems(must_include):
                 # If we haven't included a model in workset, we don't add the
                 # corresponding must_include fields for that model, since an
@@ -816,13 +828,37 @@ class Query(object):
         conflict. Even tables that previously had no alias will get an alias
         after this call.
         """
+        def prefix_gen():
+            """
+            Generates a sequence of characters in alphabetical order:
+                -> 'A', 'B', 'C', ...
+
+            When the alphabet is finished, the sequence will continue with the
+            Cartesian product:
+                -> 'AA', 'AB', 'AC', ...
+            """
+            alphabet = ascii_uppercase
+            prefix = chr(ord(self.alias_prefix) + 1)
+            yield prefix
+            for n in count(1):
+                seq = alphabet[alphabet.index(prefix):] if prefix else alphabet
+                for s in product(seq, repeat=n):
+                    yield ''.join(s)
+                prefix = None
+
         if self.alias_prefix != outer_query.alias_prefix:
             # No clashes between self and outer query should be possible.
             return
-        self.alias_prefix = chr(ord(self.alias_prefix) + 1)
-        while self.alias_prefix in self.subq_aliases:
-            self.alias_prefix = chr(ord(self.alias_prefix) + 1)
-            assert self.alias_prefix < 'Z'
+
+        local_recursion_limit = 127  # explicitly avoid infinite loop
+        for pos, prefix in enumerate(prefix_gen()):
+            if prefix not in self.subq_aliases:
+                self.alias_prefix = prefix
+                break
+            if pos > local_recursion_limit:
+                raise RuntimeError(
+                    'Maximum recursion depth exceeded: too many subqueries.'
+                )
         self.subq_aliases = self.subq_aliases.union([self.alias_prefix])
         outer_query.subq_aliases = outer_query.subq_aliases.union(self.subq_aliases)
         change_map = OrderedDict()
@@ -910,8 +946,9 @@ class Query(object):
         root_alias = self.tables[0]
         seen = {None: root_alias}
 
-        for field, model in opts.get_fields_with_model():
-            if model not in seen:
+        for field in opts.fields:
+            model = field.model._meta.concrete_model
+            if model is not opts.model and model not in seen:
                 self.join_parent_model(opts, model, root_alias, seen)
         self.included_inherited_models = seen
 
@@ -1344,7 +1381,19 @@ class Query(object):
             if name == 'pk':
                 name = opts.pk.name
             try:
-                field, model, _, _ = opts.get_field_by_name(name)
+                field = opts.get_field(name)
+
+                # Fields that contain one-to-many relations with a generic
+                # model (like a GenericForeignKey) cannot generate reverse
+                # relations and therefore cannot be used for reverse querying.
+                if field.is_relation and not field.related_model:
+                    raise FieldError(
+                        "Field %r does not generate an automatic reverse "
+                        "relation and therefore cannot be used for reverse "
+                        "querying. If it is a GenericForeignKey, consider "
+                        "adding a GenericRelation." % name
+                    )
+                model = field.model._meta.concrete_model
             except FieldDoesNotExist:
                 # is it an annotation?
                 if self._annotations and name in self._annotations:
@@ -1358,14 +1407,15 @@ class Query(object):
                 # one step.
                 pos -= 1
                 if pos == -1 or fail_on_missing:
-                    available = opts.get_all_field_names() + list(self.annotation_select)
+                    field_names = list(get_field_names_from_opts(opts))
+                    available = sorted(field_names + list(self.annotation_select))
                     raise FieldError("Cannot resolve keyword %r into field. "
                                      "Choices are: %s" % (name, ", ".join(available)))
                 break
             # Check if we need any joins for concrete inheritance cases (the
             # field lives in parent, but we are currently in one of its
             # children)
-            if model:
+            if model is not opts.model:
                 # The field lives on a base class of the current model.
                 # Skip the chain of proxy to the concrete proxied model
                 proxied_model = opts.concrete_model
@@ -1408,7 +1458,7 @@ class Query(object):
         return path, final_field, targets, names[pos + 1:]
 
     def raise_field_error(self, opts, name):
-        available = opts.get_all_field_names() + list(self.annotation_select)
+        available = list(get_field_names_from_opts(opts)) + list(self.annotation_select)
         raise FieldError("Cannot resolve keyword %r into field. "
                          "Choices are: %s" % (name, ", ".join(available)))
 
@@ -1669,7 +1719,7 @@ class Query(object):
                 # from the model on which the lookup failed.
                 raise
             else:
-                names = sorted(opts.get_all_field_names() + list(self.extra)
+                names = sorted(list(get_field_names_from_opts(opts)) + list(self.extra)
                                + list(self.annotation_select))
                 raise FieldError("Cannot resolve keyword %r into field. "
                                  "Choices are: %s" % (name, ", ".join(names)))
