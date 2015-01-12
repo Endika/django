@@ -169,8 +169,6 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     has_select_for_update = True
     has_select_for_update_nowait = False
     supports_forward_references = False
-    # XXX MySQL DB-API drivers currently fail on binary data on Python 3.
-    supports_binary_field = six.PY2
     supports_regex_backreferencing = False
     supports_date_lookup_using_string = False
     can_introspect_autofield = True
@@ -302,7 +300,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         columns. If no ordering would otherwise be applied, we don't want any
         implicit sorting going on.
         """
-        return ["NULL"]
+        return [(None, ("NULL", [], 'asc', False))]
 
     def fulltext_search_sql(self, field_name):
         return 'MATCH (%s) AGAINST (%%s IN BOOLEAN MODE)' % field_name
@@ -387,8 +385,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             return 'POW(%s)' % ','.join(sub_expressions)
         return super(DatabaseOperations, self).combine_expression(connector, sub_expressions)
 
-    def get_db_converters(self, internal_type):
-        converters = super(DatabaseOperations, self).get_db_converters(internal_type)
+    def get_db_converters(self, expression):
+        converters = super(DatabaseOperations, self).get_db_converters(expression)
+        internal_type = expression.output_field.get_internal_type()
         if internal_type in ['BooleanField', 'NullBooleanField']:
             converters.append(self.convert_booleanfield_value)
         if internal_type == 'UUIDField':
@@ -397,17 +396,17 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(self.convert_textfield_value)
         return converters
 
-    def convert_booleanfield_value(self, value, field):
+    def convert_booleanfield_value(self, value, expression, context):
         if value in (0, 1):
             value = bool(value)
         return value
 
-    def convert_uuidfield_value(self, value, field):
+    def convert_uuidfield_value(self, value, expression, context):
         if value is not None:
             value = uuid.UUID(value)
         return value
 
-    def convert_textfield_value(self, value, field):
+    def convert_textfield_value(self, value, expression, context):
         if value is not None:
             value = force_text(value)
         return value

@@ -6,7 +6,7 @@ Welcome to Django 1.8!
 
 These release notes cover the `new features`_, as well as some `backwards
 incompatible changes`_ you'll want to be aware of when upgrading from Django
-1.6 or older versions. We've also `begun the deprecation process for some
+1.7 or older versions. We've also `begun the deprecation process for some
 features`_, and some features have reached the end of their deprecation process
 and `have been removed`_.
 
@@ -45,6 +45,17 @@ new official API have been deprecated and will eventually be removed. A
 :ref:`guide to migrating from the old API to the new API
 <migrating-old-meta-api>` has been provided.
 
+Multiple template engines
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Django 1.8 defines a stable API for integrating template backends. It includes
+built-in support for the Django template language and for Jinja2_. It supports
+rendering templates with multiple engines within the same project. Learn more
+about the new features in the :doc:`topic guide </topics/templates>` and check
+the :doc:`upgrade instructions </ref/templates/upgrading>` for details.
+
+.. _Jinja2: http://jinja.pocoo.org/
+
 Security enhancements
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -62,9 +73,9 @@ New PostgreSQL specific functionality
 
 Django now has a module with extensions for PostgreSQL specific features, such
 as :class:`~django.contrib.postgres.fields.ArrayField`,
-:class:`~django.contrib.postgres.fields.HStoreField`, and :lookup:`unaccent`
-lookup. A full breakdown of the features is available :doc:`in the
-documentation </ref/contrib/postgres/index>`.
+:class:`~django.contrib.postgres.fields.HStoreField`, :ref:`range-fields`, and
+:lookup:`unaccent` lookup. A full breakdown of the features is available
+:doc:`in the documentation </ref/contrib/postgres/index>`.
 
 New data types
 ~~~~~~~~~~~~~~
@@ -160,6 +171,9 @@ Minor features
   user-specific header. A new context variable ``has_permission``, which gets
   its value from :meth:`~django.contrib.admin.AdminSite.has_permission`,
   indicates whether the user may access the site.
+
+* Foreign key dropdowns now have buttons for changing or deleting related
+  objects using a popup.
 
 :mod:`django.contrib.admindocs`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -457,6 +471,17 @@ Migrations
 * A :ref:`generic mechanism to handle the deprecation of model fields
   <migrations-removing-model-fields>` was added.
 
+* The :attr:`RunPython.noop <django.db.migrations.operations.RunPython.noop>`
+  and :meth:`RunSQL.noop() <django.db.migrations.operations.RunSQL.noop>` class
+  attribute/method were added to ease in making ``RunPython`` and ``RunSQL``
+  operations reversible.
+
+* The :class:`~django.db.migrations.operations.RunPython` and
+  :class:`~django.db.migrations.operations.RunSQL` operations now accept a
+  ``hints`` parameter that will be passed to :meth:`allow_migrate`. To take
+  advantage of this feature you must ensure that the ``allow_migrate()`` method
+  of all your routers accept ``**hints``.
+
 Models
 ^^^^^^
 
@@ -600,8 +625,9 @@ Tests
   allows you to test that two JSON fragments are not equal.
 
 * Added options to the :djadmin:`test` command to preserve the test database
-  (:djadminopt:`--keepdb`) and to run the test cases in reverse order
-  (:djadminopt:`--reverse`).
+  (:djadminopt:`--keepdb`), to run the test cases in reverse order
+  (:djadminopt:`--reverse`), and to enable SQL logging for failing tests
+  (:djadminopt:`--debug-sql`).
 
 * Added the :attr:`~django.test.Response.resolver_match` attribute to test
   client responses.
@@ -902,6 +928,23 @@ those writing third-party backends in updating their code:
   ``data_type_check_constraints`` attributes have moved from the
   ``DatabaseCreation`` class to ``DatabaseWrapper``.
 
+:mod:`django.contrib.admin`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* ``AdminSite`` no longer takes an ``app_name`` argument and its ``app_name``
+  attribute has been removed. The application name is always ``admin`` (as
+  opposed to the instance name which you can still customize using
+  ``AdminSite(name="...")``.
+
+* The ``ModelAdmin.get_object()`` method (private API) now takes a third
+  argument named ``from_field`` in order to specify which field should match
+  the provided ``object_id``.
+
+* The :meth:`ModelAdmin.response_delete()
+  <django.contrib.admin.ModelAdmin.response_delete>` method
+  now takes a second argument named ``obj_id`` which is the serialized
+  identifier used to retrieve the object before deletion.
+
 Miscellaneous
 ~~~~~~~~~~~~~
 
@@ -933,11 +976,6 @@ Miscellaneous
   ``Meta.errors_messages['username']`` or, if you have a custom form field for
   ``'username'``, using the the ``'unique'`` key in its
   :attr:`~django.forms.Field.error_messages` argument.
-
-* ``AdminSite`` no longer takes an ``app_name`` argument and its ``app_name``
-  attribute has been removed. The application name is always ``admin`` (as
-  opposed to the instance name which you can still customize using
-  ``AdminSite(name="...")``.
 
 * The block ``usertools`` in the ``base.html`` template of
   :mod:`django.contrib.admin` now requires the ``has_permission`` context
@@ -1010,7 +1048,7 @@ Miscellaneous
   result of a callable.
 
 * ``GenericIPAddressField.empty_strings_allowed`` is now ``False``. Database
-  backends that interpet empty strings as null (only Oracle among the backends
+  backends that interpret empty strings as null (only Oracle among the backends
   that Django includes) will no longer convert null values back to an empty
   string. This is consistent with other backends.
 
@@ -1020,6 +1058,17 @@ Miscellaneous
   you counted on English translations to be activated in management commands,
   this will not happen any longer. It might be that new database migrations are
   generated (once) after migrating to 1.8.
+
+* :func:`django.utils.translation.get_language()` now returns ``None`` instead
+  of :setting:`LANGUAGE_CODE` when translations are temporarily deactivated.
+
+* The migration operations :class:`~django.db.migrations.operations.RunPython`
+  and :class:`~django.db.migrations.operations.RunSQL` now call the
+  :meth:`allow_migrate` method of database routers. In these cases the
+  ``model`` argument of ``allow_migrate()`` is set to ``None``, so the router
+  must properly handle this value. This is most useful when used together with
+  the newly introduced ``hints`` parameter for these operations, but it can
+  also be used to disable migrations from running on a particular database.
 
 .. _deprecated-features-1.8:
 
@@ -1031,7 +1080,7 @@ Selected methods in ``django.db.models.options.Options``
 
 As part of the formalization of the ``Model._meta`` API (from the
 :class:`django.db.models.options.Options` class), a number of methods have been
-deprecated and will be removed in in Django 2.0:
+deprecated and will be removed in Django 2.0:
 
 * ``get_all_field_names()``
 * ``get_all_related_objects()``
@@ -1443,6 +1492,12 @@ The :ttag:`ssi` template tag allows files to be included in a template by
 absolute path. This is of limited use in most deployment situations, and
 the :ttag:`include` tag often makes more sense. This tag is now deprecated and
 will be removed in Django 2.0.
+
+``=`` as comparison operator in ``if`` template tag
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Using a single equals sign with the ``{% if %}`` template tag for equality
+testing was undocumented and untested. It's now deprecated in favor of ``==``.
 
 .. removed-features-1.8:
 

@@ -175,6 +175,7 @@ Dreamhost
 Dreamweaver
 drilldown
 dropdown
+dropdowns
 drupal
 dumpdata
 Dunck
@@ -309,6 +310,7 @@ irc
 iregex
 iriencode
 ise
+isempty
 isnull
 iso
 istartswith
@@ -515,9 +517,11 @@ refactored
 refactorings
 refactors
 referer
+reflow
 regex
 regexes
 reimplement
+reindent
 reindex
 releasers
 removetags
@@ -536,6 +540,7 @@ Roald
 rss
 runfcgi
 runserver
+SaaS
 safeseq
 Sandvik
 savepoint
