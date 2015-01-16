@@ -93,14 +93,19 @@ New data types
   backends. There is a corresponding :class:`form field
   <django.forms.DurationField>`.
 
-Query Expressions and Database Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Query Expressions, Conditional Expressions, and Database Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:doc:`Query Expressions </ref/models/expressions>` allow users to create,
+:doc:`Query Expressions </ref/models/expressions>` allow you to create,
 customize, and compose complex SQL expressions. This has enabled annotate
 to accept expressions other than aggregates. Aggregates are now able to
 reference multiple fields, as well as perform arithmetic, similar to ``F()``
-objects.
+objects. :meth:`~django.db.models.query.QuerySet.order_by` has also gained the
+ability to accept expressions.
+
+:doc:`Conditional Expressions </ref/models/conditional-expressions>` allow
+you to use :keyword:`if` ... :keyword:`elif` ... :keyword:`else` logic within
+queries.
 
 A collection of :doc:`database functions </ref/models/database-functions>` is
 also included with functionality such as
@@ -317,7 +322,15 @@ Email
 File Storage
 ^^^^^^^^^^^^
 
-* ...
+* :meth:`Storage.get_available_name()
+  <django.core.files.storage.Storage.get_available_name>` and
+  :meth:`Storage.save() <django.core.files.storage.Storage.save>`
+  now take a ``max_length`` argument to implement storage-level maximum
+  filename length constraints. Filenames exceeding this argument will get
+  truncated. This prevents a database error when appending a unique suffix to a
+  long filename that already exists on the storage. See the :ref:`deprecation
+  note <storage-max-length-update>` about adding this argument to your custom
+  storage classes.
 
 File Uploads
 ^^^^^^^^^^^^
@@ -379,6 +392,11 @@ Generic Views
 * The :meth:`~django.views.generic.edit.FormMixin.get_form()` method doesn't
   require a ``form_class`` to be provided anymore. If not provided ``form_class``
   defaults to :meth:`~django.views.generic.edit.FormMixin.get_form_class()`.
+
+* Placeholders in :attr:`ModelFormMixin.success_url
+  <django.views.generic.edit.ModelFormMixin.success_url>` now support the Python
+  :py:meth:`str.format()` syntax. The legacy ``%(<foo>)s`` syntax is still
+  supported but will be removed in Django 2.0.
 
 Internationalization
 ^^^^^^^^^^^^^^^^^^^^
@@ -924,6 +942,19 @@ Database backend API
 The following changes to the database backend API are documented to assist
 those writing third-party backends in updating their code:
 
+* ``BaseDatabaseXXX`` classes have been moved to ``django.db.backends.base``.
+  Please import them from the new locations::
+
+    from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.backends.base.client import BaseDatabaseClient
+    from django.db.backends.base.creation import BaseDatabaseCreation
+    from django.db.backends.base.features import BaseDatabaseFeatures
+    from django.db.backends.base.introspection import BaseDatabaseIntrospection
+    from django.db.backends.base.introspection import FieldInfo, TableInfo
+    from django.db.backends.base.operations import BaseDatabaseOperations
+    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+    from django.db.backends.base.validation import BaseDatabaseValidation
+
 * The ``data_types``, ``data_types_suffix``, and
   ``data_type_check_constraints`` attributes have moved from the
   ``DatabaseCreation`` class to ``DatabaseWrapper``.
@@ -1372,6 +1403,38 @@ to construct the "view on site" URL. This URL is now accessible using the
 sure to provide a default value for the ``form_class`` argument since it's
 now optional.
 
+Rendering templates loaded by :func:`~django.template.loader.get_template()` with a :class:`~django.template.Context`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The return type of :func:`~django.template.loader.get_template()` has changed
+in Django 1.8: instead of a :class:`django.template.Template`, it returns a
+``Template`` instance whose exact type depends on which backend loaded it.
+
+Both classes provide a ``render()`` method, however, the former takes a
+:class:`django.template.Context` as an argument while the latter expects a
+:class:`dict`. This change is enforced through a deprecation path for Django
+templates.
+
+Since it's easier to understand with examples, the :ref:`upgrade guide
+<get_template-upgrade-django-18>` shows how to adapt affected code.
+
+All this also applies to :func:`~django.template.loader.select_template()`.
+
+:class:`~django.template.Template` and :class:`~django.template.Context` classes in template responses
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some methods of :class:`~django.template.response.SimpleTemplateResponse` and
+:class:`~django.template.response.TemplateResponse` accepted
+:class:`django.template.Context` and :class:`django.template.Template` objects
+as arguments. They should now receive :class:`dict` and backend-dependent
+template objects respectively.
+
+This also applies to the return types if you have subclassed either template
+response class.
+
+Check the :doc:`template response API documentation </ref/template-response>`
+for details.
+
 ``current_app`` argument of template-related APIs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1431,6 +1494,17 @@ loader that inherits ``BaseLoader``, you must inherit ``Loader`` instead.
 
 Private API ``django.test.utils.TestTemplateLoader`` is deprecated in favor of
 ``django.template.loaders.locmem.Loader``.
+
+.. _storage-max-length-update:
+
+Support for the ``max_length`` argument on custom ``Storage`` classes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``Storage`` subclasses should add ``max_length=None`` as a parameter to
+:meth:`~django.core.files.storage.Storage.get_available_name` and/or
+:meth:`~django.core.files.storage.Storage.save` if they override either method.
+Support for storages that do not accept this argument will be removed in
+Django 2.0.
 
 ``qn`` replaced by ``compiler``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1498,6 +1572,13 @@ will be removed in Django 2.0.
 
 Using a single equals sign with the ``{% if %}`` template tag for equality
 testing was undocumented and untested. It's now deprecated in favor of ``==``.
+
+``%(<foo>)s`` syntax in ``ModelFormMixin.success_url``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The legacy ``%(<foo>)s`` syntax in :attr:`ModelFormMixin.success_url
+<django.views.generic.edit.ModelFormMixin.success_url>` is deprecated and
+will be removed in Django 2.0.
 
 .. removed-features-1.8:
 

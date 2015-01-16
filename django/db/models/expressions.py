@@ -6,7 +6,7 @@ from django.core.exceptions import FieldError
 from django.db.backends import utils as backend_utils
 from django.db.models import fields
 from django.db.models.constants import LOOKUP_SEP
-from django.db.models.query_utils import refs_aggregate
+from django.db.models.query_utils import refs_aggregate, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 
@@ -118,7 +118,7 @@ class CombinableMixin(object):
         )
 
 
-class ExpressionNode(CombinableMixin):
+class BaseExpression(object):
     """
     Base class for all query expressions.
     """
@@ -173,7 +173,7 @@ class ExpressionNode(CombinableMixin):
                 return True
         return False
 
-    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         """
         Provides the chance to do any preprocessing or validation before being
         added to the query.
@@ -189,6 +189,10 @@ class ExpressionNode(CombinableMixin):
         """
         c = self.copy()
         c.is_summary = summarize
+        c.set_source_expressions([
+            expr.resolve_expression(query, allow_joins, reuse, summarize)
+            for expr in c.get_source_expressions()
+        ])
         return c
 
     def _prepare(self):
@@ -319,6 +323,22 @@ class ExpressionNode(CombinableMixin):
         """
         return [e._output_field_or_none for e in self.get_source_expressions()]
 
+    def asc(self):
+        return OrderBy(self)
+
+    def desc(self):
+        return OrderBy(self, descending=True)
+
+    def reverse_ordering(self):
+        return self
+
+
+class ExpressionNode(BaseExpression, CombinableMixin):
+    """
+    An expression that can be combined with other expressions.
+    """
+    pass
+
 
 class Expression(ExpressionNode):
 
@@ -360,11 +380,11 @@ class Expression(ExpressionNode):
         sql = connection.ops.combine_expression(self.connector, expressions)
         return expression_wrapper % sql, expression_params
 
-    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         c = self.copy()
         c.is_summary = summarize
-        c.lhs = c.lhs.resolve_expression(query, allow_joins, reuse, summarize)
-        c.rhs = c.rhs.resolve_expression(query, allow_joins, reuse, summarize)
+        c.lhs = c.lhs.resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        c.rhs = c.rhs.resolve_expression(query, allow_joins, reuse, summarize, for_save)
         return c
 
 
@@ -406,11 +426,17 @@ class F(CombinableMixin):
         """
         self.name = name
 
-    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         return query.resolve_ref(self.name, allow_joins, reuse, summarize)
 
     def refs_aggregate(self, existing_aggregates):
         return refs_aggregate(self.name.split(LOOKUP_SEP), existing_aggregates)
+
+    def asc(self):
+        return OrderBy(self)
+
+    def desc(self):
+        return OrderBy(self, descending=True)
 
 
 class Func(ExpressionNode):
@@ -439,11 +465,11 @@ class Func(ExpressionNode):
             for arg in expressions
         ]
 
-    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         c = self.copy()
         c.is_summary = summarize
         for pos, arg in enumerate(c.source_expressions):
-            c.source_expressions[pos] = arg.resolve_expression(query, allow_joins, reuse, summarize)
+            c.source_expressions[pos] = arg.resolve_expression(query, allow_joins, reuse, summarize, for_save)
         return c
 
     def as_sql(self, compiler, connection, function=None, template=None):
@@ -485,12 +511,24 @@ class Value(ExpressionNode):
         self.value = value
 
     def as_sql(self, compiler, connection):
-        if self.value is None:
+        val = self.value
+        # check _output_field to avoid triggering an exception
+        if self._output_field is not None:
+            if self.for_save:
+                val = self.output_field.get_db_prep_save(val, connection=connection)
+            else:
+                val = self.output_field.get_db_prep_value(val, connection=connection)
+        if val is None:
             # cx_Oracle does not always convert None to the appropriate
             # NULL type (like in case expressions using numbers), so we
             # use a literal SQL NULL
             return 'NULL', []
-        return '%s', [self.value]
+        return '%s', [val]
+
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
+        c = super(Value, self).resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        c.for_save = for_save
+        return c
 
     def get_group_by_cols(self):
         return []
@@ -524,15 +562,6 @@ class Random(ExpressionNode):
 
     def as_sql(self, compiler, connection):
         return connection.ops.random_function_sql(), []
-
-
-class ColIndexRef(ExpressionNode):
-    def __init__(self, idx):
-        self.idx = idx
-        super(ColIndexRef, self).__init__()
-
-    def as_sql(self, compiler, connection):
-        return str(self.idx), []
 
 
 class Col(ExpressionNode):
@@ -582,6 +611,130 @@ class Ref(ExpressionNode):
         return [self]
 
 
+class When(ExpressionNode):
+    template = 'WHEN %(condition)s THEN %(result)s'
+
+    def __init__(self, condition=None, then=Value(None), **lookups):
+        if lookups and condition is None:
+            condition, lookups = Q(**lookups), None
+        if condition is None or not isinstance(condition, Q) or lookups:
+            raise TypeError("__init__() takes either a Q object or lookups as keyword arguments")
+        super(When, self).__init__(output_field=None)
+        self.condition = condition
+        self.result = self._parse_expression(then)
+
+    def __str__(self):
+        return "WHEN %r THEN %r" % (self.condition, self.result)
+
+    def __repr__(self):
+        return "<%s: %s>" % (self.__class__.__name__, self)
+
+    def get_source_expressions(self):
+        return [self.condition, self.result]
+
+    def set_source_expressions(self, exprs):
+        self.condition, self.result = exprs
+
+    def get_source_fields(self):
+        # We're only interested in the fields of the result expressions.
+        return [self.result._output_field_or_none]
+
+    def _parse_expression(self, expression):
+        return expression if hasattr(expression, 'resolve_expression') else F(expression)
+
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
+        c = self.copy()
+        c.is_summary = summarize
+        c.condition = c.condition.resolve_expression(query, allow_joins, reuse, summarize, False)
+        c.result = c.result.resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        return c
+
+    def as_sql(self, compiler, connection, template=None):
+        template_params = {}
+        sql_params = []
+        condition_sql, condition_params = compiler.compile(self.condition)
+        template_params['condition'] = condition_sql
+        sql_params.extend(condition_params)
+        result_sql, result_params = compiler.compile(self.result)
+        template_params['result'] = result_sql
+        sql_params.extend(result_params)
+        template = template or self.template
+        return template % template_params, sql_params
+
+    def get_group_by_cols(self):
+        # This is not a complete expression and cannot be used in GROUP BY.
+        cols = []
+        for source in self.get_source_expressions():
+            cols.extend(source.get_group_by_cols())
+        return cols
+
+
+class Case(ExpressionNode):
+    """
+    An SQL searched CASE expression:
+
+        CASE
+            WHEN n > 0
+                THEN 'positive'
+            WHEN n < 0
+                THEN 'negative'
+            ELSE 'zero'
+        END
+    """
+    template = 'CASE %(cases)s ELSE %(default)s END'
+    case_joiner = ' '
+
+    def __init__(self, *cases, **extra):
+        if not all(isinstance(case, When) for case in cases):
+            raise TypeError("Positional arguments must all be When objects.")
+        default = extra.pop('default', Value(None))
+        output_field = extra.pop('output_field', None)
+        super(Case, self).__init__(output_field)
+        self.cases = list(cases)
+        self.default = default if hasattr(default, 'resolve_expression') else F(default)
+
+    def __str__(self):
+        return "CASE %s, ELSE %r" % (', '.join(str(c) for c in self.cases), self.default)
+
+    def __repr__(self):
+        return "<%s: %s>" % (self.__class__.__name__, self)
+
+    def get_source_expressions(self):
+        return self.cases + [self.default]
+
+    def set_source_expressions(self, exprs):
+        self.cases = exprs[:-1]
+        self.default = exprs[-1]
+
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
+        c = self.copy()
+        c.is_summary = summarize
+        for pos, case in enumerate(c.cases):
+            c.cases[pos] = case.resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        c.default = c.default.resolve_expression(query, allow_joins, reuse, summarize, for_save)
+        return c
+
+    def as_sql(self, compiler, connection, template=None, extra=None):
+        if not self.cases:
+            return compiler.compile(self.default)
+        template_params = dict(extra) if extra else {}
+        case_parts = []
+        sql_params = []
+        for case in self.cases:
+            case_sql, case_params = compiler.compile(case)
+            case_parts.append(case_sql)
+            sql_params.extend(case_params)
+        template_params['cases'] = self.case_joiner.join(case_parts)
+        default_sql, default_params = compiler.compile(self.default)
+        template_params['default'] = default_sql
+        sql_params.extend(default_params)
+        template = template or self.template
+        sql = template % template_params
+        if self._output_field_or_none is not None:
+            sql = connection.ops.unification_cast_sql(self.output_field) % sql
+        return sql, sql_params
+
+
 class Date(ExpressionNode):
     """
     Add a date selection column.
@@ -598,7 +751,7 @@ class Date(ExpressionNode):
     def set_source_expressions(self, exprs):
         self.col, = exprs
 
-    def resolve_expression(self, query, allow_joins, reuse, summarize):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         copy = self.copy()
         copy.col = query.resolve_ref(self.lookup, allow_joins, reuse, summarize)
         field = copy.col.output_field
@@ -647,7 +800,7 @@ class DateTime(ExpressionNode):
     def set_source_expressions(self, exprs):
         self.col, = exprs
 
-    def resolve_expression(self, query, allow_joins, reuse, summarize):
+    def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         copy = self.copy()
         copy.col = query.resolve_ref(self.lookup, allow_joins, reuse, summarize)
         field = copy.col.output_field
@@ -678,3 +831,43 @@ class DateTime(ExpressionNode):
             value = value.replace(tzinfo=None)
             value = timezone.make_aware(value, self.tzinfo)
         return value
+
+
+class OrderBy(BaseExpression):
+    template = '%(expression)s %(ordering)s'
+    descending_template = 'DESC'
+    ascending_template = 'ASC'
+
+    def __init__(self, expression, descending=False):
+        self.descending = descending
+        if not hasattr(expression, 'resolve_expression'):
+            raise ValueError('expression must be an expression type')
+        self.expression = expression
+
+    def set_source_expressions(self, exprs):
+        self.expression = exprs[0]
+
+    def get_source_expressions(self):
+        return [self.expression]
+
+    def as_sql(self, compiler, connection):
+        expression_sql, params = compiler.compile(self.expression)
+        placeholders = {'expression': expression_sql}
+        placeholders['ordering'] = 'DESC' if self.descending else 'ASC'
+        return (self.template % placeholders).rstrip(), params
+
+    def get_group_by_cols(self):
+        cols = []
+        for source in self.get_source_expressions():
+            cols.extend(source.get_group_by_cols())
+        return cols
+
+    def reverse_ordering(self):
+        self.descending = not self.descending
+        return self
+
+    def asc(self):
+        self.descending = False
+
+    def desc(self):
+        self.descending = True
