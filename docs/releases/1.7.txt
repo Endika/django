@@ -51,8 +51,8 @@ but a few of the key features are:
 * A new ``makemigrations`` command provides an easy way to autodetect changes
   to your models and make migrations for them.
 
-  :data:`~django.db.models.signals.pre_syncdb` and
-  :data:`~django.db.models.signals.post_syncdb` have been deprecated,
+  ``django.db.models.signals.pre_syncdb`` and
+  ``django.db.models.signals.post_syncdb`` have been deprecated,
   to be replaced by :data:`~django.db.models.signals.pre_migrate` and
   :data:`~django.db.models.signals.post_migrate` respectively. These
   new signals have slightly different arguments. Check the
@@ -544,7 +544,7 @@ Cache
 
 * Access to caches configured in :setting:`CACHES` is now available via
   :data:`django.core.cache.caches`. This dict-like object provides a different
-  instance per thread. It supersedes :func:`django.core.cache.get_cache` which
+  instance per thread. It supersedes ``django.core.cache.get_cache()`` which
   is now deprecated.
 
 * If you instantiate cache backends directly, be aware that they aren't
@@ -738,7 +738,7 @@ Management Commands
 * :djadmin:`collectstatic` command with symlink option is now supported on
   Windows NT 6 (Windows Vista and newer).
 
-* :ref:`initial-sql` now works better if the sqlparse_ Python library is
+* Initial SQL data now works better if the sqlparse_ Python library is
   installed.
 
   Note that it's deprecated in favor of the
@@ -953,8 +953,8 @@ Backwards incompatible changes in 1.7
     deprecation timeline for a given feature, its removal may appear as a
     backwards incompatible change.
 
-allow_syncdb/allow_migrate
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+``allow_syncdb`` / ``allow_migrate``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 While Django will still look at ``allow_syncdb`` methods even though they
 should be renamed to ``allow_migrate``, there is a subtle difference in which
@@ -1468,7 +1468,7 @@ Features deprecated in 1.7
 ``django.core.cache.get_cache``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`django.core.cache.get_cache` has been supplanted by
+``django.core.cache.get_cache`` has been supplanted by
 :data:`django.core.cache.caches`.
 
 ``django.utils.dictconfig``/``django.utils.importlib``
@@ -1511,15 +1511,14 @@ Python versions, this module isn't useful anymore. It has been deprecated. Use
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As :class:`~collections.OrderedDict` was added to the standard library in
-Python 2.7, :class:`~django.utils.datastructures.SortedDict` is no longer
-needed and has been deprecated.
+Python 2.7, ``SortedDict`` is no longer needed and has been deprecated.
 
 Custom SQL location for models package
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Previously, if models were organized in a package (``myapp/models/``) rather
-than simply ``myapp/models.py``, Django would look for :ref:`initial SQL data
-<initial-sql>` in ``myapp/models/sql/``. This bug has been fixed so that Django
+than simply ``myapp/models.py``, Django would look for initial SQL data in
+``myapp/models/sql/``. This bug has been fixed so that Django
 will search ``myapp/sql/`` as documented. After this issue was fixed, migrations
 were added which deprecates initial SQL data. Thus, while this change still
 exists, the deprecation is irrelevant as the entire feature will be removed in
@@ -1568,7 +1567,7 @@ submodules and the ``django.contrib.contenttypes.generic`` module is deprecated:
 ``syncdb``
 ~~~~~~~~~~
 
-The :djadmin:`syncdb` command has been deprecated in favor of the new :djadmin:`migrate`
+The ``syncdb`` command has been deprecated in favor of the new :djadmin:`migrate`
 command. ``migrate`` takes the same arguments as ``syncdb`` used to plus a few
 more, so it's safe to just change the name you're calling and nothing else.
 

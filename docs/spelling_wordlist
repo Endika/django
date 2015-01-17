@@ -199,9 +199,7 @@ Facebook
 fallback
 fallbacks
 faq
-fastcgi
 FastCGI
-fcgid
 fieldset
 fieldsets
 filesizeformat
@@ -540,7 +538,6 @@ rjust
 roadmap
 Roald
 rss
-runfcgi
 runserver
 SaaS
 safeseq
@@ -588,7 +585,6 @@ Springmeyer
 sql
 sqlall
 sqlclear
-sqlcustom
 sqldropindexes
 sqlflush
 sqlindexes
@@ -633,7 +629,6 @@ subwidgets
 symlink
 symlinking
 symlinks
-syncdb
 sysadmin
 systemwide
 tablespace

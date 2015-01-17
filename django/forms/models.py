@@ -7,7 +7,6 @@ from __future__ import unicode_literals
 
 from collections import OrderedDict
 from itertools import chain
-import warnings
 
 from django.core.exceptions import (
     ImproperlyConfigured, ValidationError, NON_FIELD_ERRORS, FieldError)
@@ -18,7 +17,6 @@ from django.forms.utils import ErrorList
 from django.forms.widgets import (SelectMultiple, HiddenInput,
     MultipleHiddenInput)
 from django.utils import six
-from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils.encoding import smart_text, force_text
 from django.utils.text import get_text_list, capfirst
 from django.utils.translation import ugettext_lazy as _, ugettext
@@ -1078,16 +1076,8 @@ class ModelChoiceIterator(object):
     def __iter__(self):
         if self.field.empty_label is not None:
             yield ("", self.field.empty_label)
-        if self.field.cache_choices:
-            if self.field.choice_cache is None:
-                self.field.choice_cache = [
-                    self.choice(obj) for obj in self.queryset.iterator()
-                ]
-            for choice in self.field.choice_cache:
-                yield choice
-        else:
-            for obj in self.queryset.iterator():
-                yield self.choice(obj)
+        for obj in self.queryset.iterator():
+            yield self.choice(obj)
 
     def __len__(self):
         return (len(self.queryset) +
@@ -1106,7 +1096,7 @@ class ModelChoiceField(ChoiceField):
                             ' the available choices.'),
     }
 
-    def __init__(self, queryset, empty_label="---------", cache_choices=None,
+    def __init__(self, queryset, empty_label="---------",
                  required=True, widget=None, label=None, initial=None,
                  help_text='', to_field_name=None, limit_choices_to=None,
                  *args, **kwargs):
@@ -1114,13 +1104,6 @@ class ModelChoiceField(ChoiceField):
             self.empty_label = None
         else:
             self.empty_label = empty_label
-        if cache_choices is not None:
-            warnings.warn("cache_choices has been deprecated and will be "
-                "removed in Django 1.9.",
-                RemovedInDjango19Warning, stacklevel=2)
-        else:
-            cache_choices = False
-        self.cache_choices = cache_choices
 
         # Call Field instead of ChoiceField __init__() because we don't need
         # ChoiceField.__init__().
@@ -1128,7 +1111,6 @@ class ModelChoiceField(ChoiceField):
                        *args, **kwargs)
         self.queryset = queryset
         self.limit_choices_to = limit_choices_to   # limit the queryset later.
-        self.choice_cache = None
         self.to_field_name = to_field_name
 
     def get_limit_choices_to(self):
@@ -1222,12 +1204,10 @@ class ModelMultipleChoiceField(ModelChoiceField):
         'invalid_pk_value': _('"%(pk)s" is not a valid value for a primary key.')
     }
 
-    def __init__(self, queryset, cache_choices=None, required=True,
-                 widget=None, label=None, initial=None,
-                 help_text='', *args, **kwargs):
+    def __init__(self, queryset, required=True, widget=None, label=None,
+                 initial=None, help_text='', *args, **kwargs):
         super(ModelMultipleChoiceField, self).__init__(queryset, None,
-            cache_choices, required, widget, label, initial, help_text,
-            *args, **kwargs)
+            required, widget, label, initial, help_text, *args, **kwargs)
 
     def to_python(self, value):
         if not value:

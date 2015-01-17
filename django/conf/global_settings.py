@@ -130,10 +130,8 @@ LANGUAGES = (
     ('uk', gettext_noop('Ukrainian')),
     ('ur', gettext_noop('Urdu')),
     ('vi', gettext_noop('Vietnamese')),
-    ('zh-cn', gettext_noop('Simplified Chinese')),
     ('zh-hans', gettext_noop('Simplified Chinese')),
     ('zh-hant', gettext_noop('Traditional Chinese')),
-    ('zh-tw', gettext_noop('Traditional Chinese')),
 )
 
 # Languages using BiDi (right-to-left) layout
@@ -432,8 +430,8 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 USE_X_FORWARDED_HOST = False
 
-# The Python dotted path to the WSGI application that Django's internal servers
-# (runserver, runfcgi) will use. If `None`, the return value of
+# The Python dotted path to the WSGI application that Django's internal server
+# (runserver) will use. If `None`, the return value of
 # 'django.core.wsgi.get_wsgi_application' is used, thus preserving the same
 # behavior as previous versions of Django. Otherwise this should point to an
 # actual WSGI application object.

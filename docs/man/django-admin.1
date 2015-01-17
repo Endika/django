@@ -64,11 +64,6 @@ Runs over the entire source tree of the current directory and pulls out all
 strings marked for translation. It creates (or updates) a message file in the
 conf/locale (in the django tree) or locale (for project and application) directory.
 .TP
-.BI "runfcgi [" "KEY=val" "] [" "KEY=val" "] " "..."
-Runs this project as a FastCGI application. Requires flup. Use
-.B runfcgi help
-for help on the KEY=val pairs.
-.TP
 .BI "runserver [" "\-\-noreload" "] [" "\-\-nothreading" "] [" "\-\-nostatic" "] [" "\-\-insecure" "] [" "\-\-ipv6" "] [" "port|ipaddr:port" "]"
 Starts a lightweight Web server for development.
 .TP
@@ -88,9 +83,6 @@ given model module name(s).
 .TP
 .BI "sqlclear [" "app_label ..." "]"
 Prints the DROP TABLE SQL statements for the given app name(s).
-.TP
-.BI "sqlcustom [" "app_label ..." "]"
-Prints the custom SQL statements for the given app name(s).
 .TP
 .BI "sqlflush [" "app_label ..." "]"
 Prints the SQL statements that would be executed for the "flush" command.

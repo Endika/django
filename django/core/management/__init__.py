@@ -25,8 +25,6 @@ def find_commands(management_dir):
     Returns an empty list if no commands are defined.
     """
     command_dir = os.path.join(management_dir, 'commands')
-    # Workaround for a Python 3.2 bug with pkgutil.iter_modules
-    sys.path_importer_cache.pop(command_dir, None)
     return [name for _, name, is_pkg in pkgutil.iter_modules([command_dir])
             if not is_pkg and not name.startswith('_')]
 
@@ -83,7 +81,7 @@ def call_command(name, *args, **options):
     This is the primary API you should use for calling specific commands.
 
     Some examples:
-        call_command('syncdb')
+        call_command('migrate')
         call_command('shell', plain=True)
         call_command('sqlmigrate', 'myapp')
     """
@@ -233,14 +231,9 @@ class ManagementUtility(object):
         # special case: the 'help' subcommand has no options
         elif cwords[0] in subcommands and cwords[0] != 'help':
             subcommand_cls = self.fetch_command(cwords[0])
-            # special case: 'runfcgi' stores additional options as
-            # 'key=value' pairs
-            if cwords[0] == 'runfcgi':
-                from django.core.servers.fastcgi import FASTCGI_OPTIONS
-                options.extend((k, 1) for k in FASTCGI_OPTIONS)
             # special case: add the names of installed apps to options
-            elif cwords[0] in ('dumpdata', 'sql', 'sqlall', 'sqlclear',
-                    'sqlcustom', 'sqlindexes', 'sqlmigrate', 'sqlsequencereset', 'test'):
+            if cwords[0] in ('dumpdata', 'sql', 'sqlall', 'sqlclear',
+                    'sqlindexes', 'sqlmigrate', 'sqlsequencereset', 'test'):
                 try:
                     app_configs = apps.get_app_configs()
                     # Get the last part of the dotted path as the app name.

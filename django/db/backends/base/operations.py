@@ -1,13 +1,12 @@
 import datetime
 import decimal
 from importlib import import_module
-import warnings
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db.backends import utils
 from django.utils import six, timezone
 from django.utils.dateparse import parse_duration
-from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils.encoding import force_text
 
 
@@ -219,7 +218,7 @@ class BaseDatabaseOperations(object):
         """
         return cursor.lastrowid
 
-    def lookup_cast(self, lookup_type):
+    def lookup_cast(self, lookup_type, internal_type=None):
         """
         Returns the string to use in a query when performing lookups
         ("contains", "like", etc). The resulting string should contain a '%s'
@@ -255,7 +254,7 @@ class BaseDatabaseOperations(object):
         """
         return 'DEFAULT'
 
-    def prepare_sql_script(self, sql, _allow_fallback=False):
+    def prepare_sql_script(self, sql):
         """
         Takes a SQL script that may contain multiple lines and returns a list
         of statements to feed to successive cursor.execute() calls.
@@ -264,21 +263,13 @@ class BaseDatabaseOperations(object):
         cursor.execute() call and PEP 249 doesn't talk about this use case,
         the default implementation is conservative.
         """
-        # Remove _allow_fallback and keep only 'return ...' in Django 1.9.
         try:
-            # This import must stay inside the method because it's optional.
             import sqlparse
         except ImportError:
-            if _allow_fallback:
-                # Without sqlparse, fall back to the legacy (and buggy) logic.
-                warnings.warn(
-                    "Providing initial SQL data on a %s database will require "
-                    "sqlparse in Django 1.9." % self.connection.vendor,
-                    RemovedInDjango19Warning)
-                from django.core.management.sql import _split_statements
-                return _split_statements(sql)
-            else:
-                raise
+            raise ImproperlyConfigured(
+                "sqlparse is required if you don't split your SQL "
+                "statements manually."
+            )
         else:
             return [sqlparse.format(statement, strip_comments=True)
                     for statement in sqlparse.split(sql) if statement]
@@ -442,7 +433,7 @@ class BaseDatabaseOperations(object):
 
     def value_to_db_date(self, value):
         """
-        Transform a date value to an object compatible with what is expected
+        Transforms a date value to an object compatible with what is expected
         by the backend driver for date columns.
         """
         if value is None:
@@ -451,7 +442,7 @@ class BaseDatabaseOperations(object):
 
     def value_to_db_datetime(self, value):
         """
-        Transform a datetime value to an object compatible with what is expected
+        Transforms a datetime value to an object compatible with what is expected
         by the backend driver for datetime columns.
         """
         if value is None:
@@ -460,7 +451,7 @@ class BaseDatabaseOperations(object):
 
     def value_to_db_time(self, value):
         """
-        Transform a time value to an object compatible with what is expected
+        Transforms a time value to an object compatible with what is expected
         by the backend driver for time columns.
         """
         if value is None:
@@ -471,10 +462,17 @@ class BaseDatabaseOperations(object):
 
     def value_to_db_decimal(self, value, max_digits, decimal_places):
         """
-        Transform a decimal.Decimal value to an object compatible with what is
+        Transforms a decimal.Decimal value to an object compatible with what is
         expected by the backend driver for decimal (numeric) columns.
         """
         return utils.format_number(value, max_digits, decimal_places)
+
+    def value_to_db_ipaddress(self, value):
+        """
+        Transforms a string representation of an IP address into the expected
+        type for the backend driver.
+        """
+        return value
 
     def year_lookup_bounds_for_date_field(self, value):
         """

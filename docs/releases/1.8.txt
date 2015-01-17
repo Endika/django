@@ -233,16 +233,6 @@ Minor features
   ``OGRException`` has been kept for backwards compatibility but should not be
   used any longer.
 
-:mod:`django.contrib.messages`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-* ...
-
-:mod:`django.contrib.redirects`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-* ...
-
 :mod:`django.contrib.sessions`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -266,16 +256,6 @@ Minor features
 * The default :class:`~django.contrib.sites.models.Site` created when running
   ``migrate`` now respects the :setting:`SITE_ID` setting (instead of always
   using ``pk=1``).
-
-:mod:`django.contrib.staticfiles`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-* ...
-
-:mod:`django.contrib.syndication`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-* ...
 
 Cache
 ^^^^^
@@ -331,11 +311,6 @@ File Storage
   long filename that already exists on the storage. See the :ref:`deprecation
   note <storage-max-length-update>` about adding this argument to your custom
   storage classes.
-
-File Uploads
-^^^^^^^^^^^^
-
-* ...
 
 Forms
 ^^^^^
@@ -1101,6 +1076,10 @@ Miscellaneous
   the newly introduced ``hints`` parameter for these operations, but it can
   also be used to disable migrations from running on a particular database.
 
+* The ``name`` field of :class:`django.contrib.contenttypes.models.ContentType`
+  has been removed by a migration and replaced by a property. That means it's
+  not possible to query or filter a ``ContentType`` by this field any longer.
+
 .. _deprecated-features-1.8:
 
 Features deprecated in 1.8
@@ -1388,8 +1367,8 @@ moved to the `django-localflavor`_ package (version 1.1+).
 
 .. _django-localflavor: https://pypi.python.org/pypi/django-localflavor
 
-``django.contrib.admin.helpers.InlineAdminForm.original_content_type_id``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``InlineAdminForm.original_content_type_id``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``original_content_type_id`` attribute on ``InlineAdminForm`` has been
 deprecated and will be removed in Django 2.0. Historically, it was used
@@ -1579,6 +1558,14 @@ testing was undocumented and untested. It's now deprecated in favor of ``==``.
 The legacy ``%(<foo>)s`` syntax in :attr:`ModelFormMixin.success_url
 <django.views.generic.edit.ModelFormMixin.success_url>` is deprecated and
 will be removed in Django 2.0.
+
+``GeoQuerySet`` aggregate methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``collect()``, ``extent()``, ``extent3d()``, ``makeline()``, and ``union()``
+aggregate methods are deprecated and should be replaced by their function-based
+aggregate equivalents (``Collect``, ``Extent``, ``Extent3D``, ``MakeLine``, and
+``Union``).
 
 .. removed-features-1.8:
 

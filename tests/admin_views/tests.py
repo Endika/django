@@ -11,7 +11,7 @@ from django.core.checks import Error
 from django.core.files import temp as tempfile
 from django.core.exceptions import ImproperlyConfigured
 from django.core.urlresolvers import (NoReverseMatch,
-    get_script_prefix, reverse, set_script_prefix)
+    get_script_prefix, resolve, reverse, set_script_prefix)
 # Register auth models with the admin.
 from django.contrib.auth import get_permission_codename
 from django.contrib.admin import ModelAdmin
@@ -56,6 +56,7 @@ from .models import (Article, BarAccount, CustomArticle, EmptyModel, FooAccount,
     Simple, UndeletableObject, UnchangeableObject, Choice, ShortMessage,
     Telegram, Pizza, Topping, FilteredManager, City, Restaurant, Worker,
     ParentWithDependentChildren, Character, FieldOverridePost, Color2)
+from . import customadmin
 from .admin import site, site2, CityAdmin
 
 
@@ -748,6 +749,12 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
             reverse('admin:app_list', kwargs={'app_label': 'this_should_fail'})
         with self.assertRaises(NoReverseMatch):
             reverse('admin:app_list', args=('admin_views2',))
+
+    def test_resolve_admin_views(self):
+        index_match = resolve('/test_admin/admin4/')
+        list_match = resolve('/test_admin/admin4/auth/user/')
+        self.assertIs(index_match.func.admin_site, customadmin.simple_site)
+        self.assertIsInstance(list_match.func.model_admin, customadmin.CustomPwdTemplateUserAdmin)
 
     def test_proxy_model_content_type_is_used_for_log_entries(self):
         """
@@ -1974,7 +1981,7 @@ class AdminViewStringPrimaryKeyTest(TestCase):
         self.assertContains(response, should_contain)
         should_contain = "Model with string primary key"  # capitalized in Recent Actions
         self.assertContains(response, should_contain)
-        logentry = LogEntry.objects.get(content_type__name__iexact=should_contain)
+        logentry = LogEntry.objects.get(content_type__model__iexact='modelwithstringprimarykey')
         # http://code.djangoproject.com/ticket/10275
         # if the log entry doesn't have a content type it should still be
         # possible to view the Recent Actions part
@@ -1989,8 +1996,8 @@ class AdminViewStringPrimaryKeyTest(TestCase):
 
     def test_logentry_get_admin_url(self):
         "LogEntry.get_admin_url returns a URL to edit the entry's object or None for non-existent (possibly deleted) models"
-        log_entry_name = "Model with string primary key"  # capitalized in Recent Actions
-        logentry = LogEntry.objects.get(content_type__name__iexact=log_entry_name)
+        log_entry_model = "modelwithstringprimarykey"  # capitalized in Recent Actions
+        logentry = LogEntry.objects.get(content_type__model__iexact=log_entry_model)
         model = "modelwithstringprimarykey"
         desired_admin_url = "/test_admin/admin/admin_views/%s/%s/" % (model, iri_to_uri(quote(self.pk)))
         self.assertEqual(logentry.get_admin_url(), desired_admin_url)

@@ -19,13 +19,11 @@ import unittest
 import django
 from django import conf, get_version
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.core.management import BaseCommand, CommandError, call_command, color
-from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils.encoding import force_text
 from django.utils._os import npath, upath
 from django.utils.six import StringIO
-from django.test import LiveServerTestCase, TestCase, ignore_warnings, mock, override_settings
+from django.test import LiveServerTestCase, TestCase, mock, override_settings
 from django.test.runner import DiscoverRunner
 
 
@@ -1386,7 +1384,6 @@ class CommandTypes(AdminScriptTestCase):
         out, err = self.run_manage(args)
         self.assertNoOutput(err)
         self.assertOutput(out, "Checks the entire Django project for potential problems.")
-        self.assertEqual(out.count('optional arguments'), 1)
 
     def test_color_style(self):
         style = color.no_style()
@@ -1662,11 +1659,6 @@ class CommandTypes(AdminScriptTestCase):
         self.assertNoOutput(err)
         self.assertOutput(out, "EXECUTE:LabelCommand label=testlabel, options=[('no_color', False), ('pythonpath', None), ('settings', None), ('traceback', False), ('verbosity', 1)]")
         self.assertOutput(out, "EXECUTE:LabelCommand label=anotherlabel, options=[('no_color', False), ('pythonpath', None), ('settings', None), ('traceback', False), ('verbosity', 1)]")
-
-    @ignore_warnings(category=RemovedInDjango19Warning)
-    def test_requires_model_validation_and_requires_system_checks_both_defined(self):
-        from .management.commands.validation_command import InvalidCommand
-        self.assertRaises(ImproperlyConfigured, InvalidCommand)
 
 
 class Discovery(TestCase):

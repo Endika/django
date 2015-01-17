@@ -341,12 +341,6 @@ prompts.
 The :djadminopt:`--database` option may be used to specify the database
 to flush.
 
-``--no-initial-data``
-~~~~~~~~~~~~~~~~~~~~~
-
-Use ``--no-initial-data`` to avoid loading the initial_data fixture.
-
-
 inspectdb
 ---------
 
@@ -751,10 +745,6 @@ The behavior of this command changes depending on the arguments provided:
   migrated past the named migration. Use the name ``zero`` to unapply all
   migrations for an app.
 
-Unlike ``syncdb``, this command does not prompt you to create a superuser if
-one doesn't exist (assuming you are using :mod:`django.contrib.auth`). Use
-:djadmin:`createsuperuser` to do that if you wish.
-
 The :djadminopt:`--database` option can be used to specify the database to
 migrate.
 
@@ -774,133 +764,6 @@ run correctly.
 
     The ``--list`` option has been moved to the :djadmin:`showmigrations`
     command.
-
-runfcgi [options]
------------------
-
-.. django-admin:: runfcgi
-
-.. deprecated:: 1.7
-    FastCGI support is deprecated and will be removed in Django 1.9.
-
-Starts a set of FastCGI processes suitable for use with any Web server that
-supports the FastCGI protocol. See the :doc:`FastCGI deployment documentation
-</howto/deployment/fastcgi>` for details. Requires the Python FastCGI module from
-`flup`_.
-
-Internally, this wraps the WSGI application object specified by the
-:setting:`WSGI_APPLICATION` setting.
-
-.. _flup: http://www.saddi.com/software/flup/
-
-The options accepted by this command are passed to the FastCGI library and
-don't use the ``'--'`` prefix as is usual for other Django management commands.
-
-.. django-admin-option:: protocol
-
-``protocol=PROTOCOL``
-
-Protocol to use. *PROTOCOL* can be ``fcgi``, ``scgi``, ``ajp``, etc.
-(default is ``fcgi``)
-
-.. django-admin-option:: host
-
-``host=HOSTNAME``
-
-Hostname to listen on.
-
-.. django-admin-option:: port
-
-``port=PORTNUM``
-
-Port to listen on.
-
-.. django-admin-option:: socket
-
-``socket=FILE``
-
-UNIX socket to listen on.
-
-.. django-admin-option:: method
-
-``method=IMPL``
-
-Possible values: ``prefork`` or ``threaded`` (default ``prefork``)
-
-.. django-admin-option:: maxrequests
-
-``maxrequests=NUMBER``
-
-Number of requests a child handles before it is killed and a new child is
-forked (0 means no limit).
-
-.. django-admin-option:: maxspare
-
-``maxspare=NUMBER``
-
-Max number of spare processes / threads.
-
-.. django-admin-option:: minspare
-
-``minspare=NUMBER``
-
-Min number of spare processes / threads.
-
-.. django-admin-option:: maxchildren
-
-``maxchildren=NUMBER``
-
-Hard limit number of processes / threads.
-
-.. django-admin-option:: daemonize
-
-``daemonize=BOOL``
-
-Whether to detach from terminal.
-
-.. django-admin-option:: pidfile
-
-``pidfile=FILE``
-
-Write the spawned process-id to file *FILE*.
-
-.. django-admin-option:: workdir
-
-``workdir=DIRECTORY``
-
-Change to directory *DIRECTORY* when daemonizing.
-
-.. django-admin-option:: debug
-
-``debug=BOOL``
-
-Set to true to enable flup tracebacks.
-
-.. django-admin-option:: outlog
-
-``outlog=FILE``
-
-Write stdout to the *FILE* file.
-
-.. django-admin-option:: errlog
-
-``errlog=FILE``
-
-Write stderr to the *FILE* file.
-
-.. django-admin-option:: umask
-
-``umask=UMASK``
-
-Umask to use when daemonizing. The value is interpreted as an octal number
-(default value is ``0o22``).
-
-Example usage::
-
-    django-admin runfcgi socket=/tmp/fcgi.sock method=prefork daemonize=true \
-        pidfile=/var/run/django-fcgi.pid
-
-Run a FastCGI server as a daemon and write the spawned PID in a file.
 
 runserver [port or address:port]
 --------------------------------
@@ -1126,9 +989,6 @@ sqlall <app_label app_label ...>
 
 Prints the CREATE TABLE and initial-data SQL statements for the given app name(s).
 
-Refer to the description of :djadmin:`sqlcustom` for an explanation of how to
-specify initial data.
-
 The :djadminopt:`--database` option can be used to specify the database for
 which to print the SQL.
 
@@ -1145,30 +1005,6 @@ sqlclear <app_label app_label ...>
 .. django-admin:: sqlclear
 
 Prints the DROP TABLE SQL statements for the given app name(s).
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
-sqlcustom <app_label app_label ...>
------------------------------------
-
-.. django-admin:: sqlcustom
-
-Prints the custom SQL statements for the given app name(s).
-
-For each model in each specified app, this command looks for the file
-``<app_label>/sql/<modelname>.sql``, where ``<app_label>`` is the given app
-name and ``<modelname>`` is the model's name in lowercase. For example, if you
-have an app ``news`` that includes a ``Story`` model, ``sqlcustom`` will
-attempt to read a file ``news/sql/story.sql`` and append it to the output of
-this command.
-
-Each of the SQL files, if given, is expected to contain valid SQL. The SQL
-files are piped directly into the database after all of the models'
-table-creation statements have been executed. Use this SQL hook to make any
-table modifications, or insert any SQL functions into the database.
-
-Note that the order in which the SQL files are processed is undefined.
 
 The :djadminopt:`--database` option can be used to specify the database for
 which to print the SQL.
@@ -1390,19 +1226,6 @@ Please also see the :ref:`rendering warning <render_warning>` as mentioned
 for :djadmin:`startapp`.
 
 .. _`template source`: https://github.com/django/django/tree/master/django/conf/project_template/
-
-syncdb
-------
-
-.. django-admin:: syncdb
-
-.. deprecated:: 1.7
-
-    This command has been deprecated in favor of the :djadmin:`migrate`
-    command, which performs both the old behavior as well as executing
-    migrations. It is now just an alias to that command.
-
-Alias for :djadmin:`migrate`.
 
 test <app or test identifier>
 -----------------------------
