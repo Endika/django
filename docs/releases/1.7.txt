@@ -74,9 +74,8 @@ but a few of the key features are:
   <test-case-serialized-rollback>`.
 
 * It is not advised to have apps without migrations depend on (have a
-  :ref:`ForeignKey <ref-foreignkey>` or :ref:`ManyToManyField <ref-manytomany>` to) apps with migrations. Read the
-  :ref:`dependencies documentation <unmigrated-dependencies>` for more.
-
+  :ref:`ForeignKey <ref-foreignkey>` or :ref:`ManyToManyField <ref-manytomany>`
+  to) apps with migrations.
 
 * If you are upgrading from South, see our :ref:`upgrading-from-south`
   documentation, and third-party app authors should read the
@@ -222,7 +221,7 @@ resolving those problems. The framework is extensible so you can add your
 own checks for your own apps and libraries.
 
 To perform system checks, you use the :djadmin:`check` management command.
-This command replaces the older :djadmin:`validate` management command.
+This command replaces the older ``validate`` management command.
 
 New ``Prefetch`` object for advanced ``prefetch_related`` operations.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1481,8 +1480,8 @@ versions prior to 2.7. They have been deprecated.
 ``django.utils.module_loading.import_by_path``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The current :meth:`~django.utils.module_loading.import_by_path` function
-catches ``AttributeError``, ``ImportError`` and ``ValueError`` exceptions,
+The current ``django.utils.module_loading.import_by_path`` function
+catches ``AttributeError``, ``ImportError``, and ``ValueError`` exceptions,
 and re-raises :exc:`~django.core.exceptions.ImproperlyConfigured`. Such
 exception masking makes it needlessly hard to diagnose circular import
 problems, because it makes it look like the problem comes from inside Django.
@@ -1681,7 +1680,8 @@ deprecated, use ``SplitDateTimeWidget`` with
 ``validate``
 ~~~~~~~~~~~~
 
-:djadmin:`validate` command is deprecated in favor of :djadmin:`check` command.
+The ``validate`` management command is deprecated in favor of the
+:djadmin:`check` command.
 
 ``django.core.management.BaseCommand``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1693,10 +1693,16 @@ value of the former flag is used. Defining both ``requires_system_checks`` and
 
 The ``check()`` method has replaced the old ``validate()`` method.
 
-``ModelAdmin.validator``
-~~~~~~~~~~~~~~~~~~~~~~~~
+``ModelAdmin`` validators
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``ModelAdmin.validator`` is deprecated in favor of new ``checks`` attribute.
+The ``ModelAdmin.validator_class`` and ``default_validator_class`` attributes
+are deprecated in favor of the new ``checks_class`` attribute.
+
+The ``ModelAdmin.validate()`` method is deprecated in favor of
+``ModelAdmin.check()``.
+
+The ``django.contrib.admin.validation`` module is deprecated.
 
 ``django.db.backends.DatabaseValidation.validate_field``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1755,6 +1761,23 @@ FastCGI support
 
 FastCGI support via the ``runfcgi`` management command will be removed in
 Django 1.9. Please deploy your project using WSGI.
+
+Moved objects in ``contrib.sites``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Following the app-loading refactor, two objects in
+``django.contrib.sites.models`` needed to be moved because they must be
+available without importing ``django.contrib.sites.models`` when
+``django.contrib.sites`` isn't installed. Import ``RequestSite`` from
+``django.contrib.sites.requests`` and ``get_current_site()`` from
+``django.contrib.sites.shortcuts``. The old import locations will work until
+Django 1.9.
+
+``django.forms.forms.get_declared_fields()``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Django no longer uses this functional internally. Even though it's a private
+API, it'll go through the normal deprecation cycle.
 
 .. removed-features-1.7:
 

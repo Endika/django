@@ -304,15 +304,6 @@ When this option is specified, Django will not provide the primary key in the
 serialized data of this object since it can be calculated during
 deserialization.
 
-.. django-admin-option:: --natural
-
-.. deprecated:: 1.7
-    Equivalent to the :djadminopt:`--natural-foreign` option; use that instead.
-
-Use :ref:`natural keys <topics-serialization-natural-keys>` to represent
-any foreign key and many-to-many relationship with a model that provides
-a natural key definition.
-
 .. django-admin-option:: --pks
 
 By default, ``dumpdata`` will output all the records of the model, but
@@ -972,53 +963,6 @@ beyond those apps. Same as ``--list``, applied migrations are marked by an
 ``[X]``. For a verbosity of 2 and above, all dependencies of a migration will
 also be shown.
 
-sql <app_label app_label ...>
------------------------------
-
-.. django-admin:: sql
-
-Prints the CREATE TABLE SQL statements for the given app name(s).
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
-sqlall <app_label app_label ...>
---------------------------------
-
-.. django-admin:: sqlall
-
-Prints the CREATE TABLE and initial-data SQL statements for the given app name(s).
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
-.. versionchanged:: 1.7
-
-    The ``sql*`` management commands now respect the ``allow_migrate()`` method
-    of :setting:`DATABASE_ROUTERS`. If you have models synced to non-default
-    databases, use the :djadminopt:`--database` flag to get SQL for those
-    models (previously they would always be included in the output).
-
-sqlclear <app_label app_label ...>
-----------------------------------
-
-.. django-admin:: sqlclear
-
-Prints the DROP TABLE SQL statements for the given app name(s).
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
-sqldropindexes <app_label app_label ...>
-----------------------------------------
-
-.. django-admin:: sqldropindexes
-
-Prints the DROP INDEX SQL statements for the given app name(s).
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
 sqlflush
 --------
 
@@ -1026,16 +970,6 @@ sqlflush
 
 Prints the SQL statements that would be executed for the :djadmin:`flush`
 command.
-
-The :djadminopt:`--database` option can be used to specify the database for
-which to print the SQL.
-
-sqlindexes <app_label app_label ...>
-------------------------------------
-
-.. django-admin:: sqlindexes
-
-Prints the CREATE INDEX SQL statements for the given app name(s).
 
 The :djadminopt:`--database` option can be used to specify the database for
 which to print the SQL.
@@ -1342,17 +1276,6 @@ To run on 1.2.3.4:7000 with a ``test`` fixture::
 
 The :djadminopt:`--noinput` option may be provided to suppress all user
 prompts.
-
-validate
---------
-
-.. django-admin:: validate
-
-.. deprecated:: 1.7
-    Replaced by the :djadmin:`check` command.
-
-Validates all installed models (according to the :setting:`INSTALLED_APPS`
-setting) and prints validation errors to standard output.
 
 Commands provided by applications
 =================================
@@ -1748,14 +1671,14 @@ with ``True`` or ``False``, as you can see with the ``interactive`` option above
 Named arguments can be passed by using either one of the following syntaxes::
 
       # Similar to the command line
-      management.call_command('dumpdata', '--natural')
+      management.call_command('dumpdata', '--natural-foreign')
 
       # Named argument similar to the command line minus the initial dashes and
       # with internal dashes replaced by underscores
-      management.call_command('dumpdata', natural=True)
+      management.call_command('dumpdata', natural_foreign=True)
 
-      # `use_natural_keys` is the option destination variable
-      management.call_command('dumpdata', use_natural_keys=True)
+      # `use_natural_foreign_keys` is the option destination variable
+      management.call_command('dumpdata', use_natural_foreign_keys=True)
 
 .. versionchanged:: 1.8
 
