@@ -216,6 +216,9 @@ Minor features
 * A new :doc:`GeoJSON serializer </ref/contrib/gis/serializers>` is now
   available.
 
+* It is now allowed to include a subquery as a geographic lookup argument, for
+  example ``City.objects.filter(point__within=Country.objects.filter(continent='Africa').values('mpoly'))``.
+
 * The Spatialite backend now supports ``Collect`` and ``Extent`` aggregates
   when the database version is 3.0 or later.
 
@@ -336,9 +339,10 @@ Forms
   a form's :attr:`~django.forms.Form.label_suffix` while using  shortcuts such
   as ``{{ form.as_p }}`` in templates.
 
-* :class:`~django.forms.extras.widgets.SelectDateWidget` now accepts an
-  :attr:`~django.forms.extras.widgets.SelectDateWidget.empty_label` argument, which will
-  override the top list choice label when :class:`~django.forms.DateField` is not required.
+* :class:`~django.forms.SelectDateWidget` now accepts an
+  :attr:`~django.forms.SelectDateWidget.empty_label` argument, which will
+  override the top list choice label when :class:`~django.forms.DateField`
+  is not required.
 
 * After an :class:`~django.forms.ImageField` has been cleaned and validated, the
   ``UploadedFile`` object will have an additional ``image`` attribute containing
@@ -415,6 +419,9 @@ Management Commands
   introspect :class:`~django.db.models.AutoField` for MySQL and PostgreSQL
   databases.
 
+* :djadmin:`inspectdb` now introspects database views on all database backends.
+  In previous versions, only tables (not views) were inspected.
+
 * When calling management commands from code through :ref:`call_command
   <call-command>` and passing options, the option name can match the command
   line option name (without the initial dashes) or the final option destination
@@ -464,9 +471,9 @@ Migrations
 * A :ref:`generic mechanism to handle the deprecation of model fields
   <migrations-removing-model-fields>` was added.
 
-* The :attr:`RunPython.noop <django.db.migrations.operations.RunPython.noop>`
-  and :meth:`RunSQL.noop() <django.db.migrations.operations.RunSQL.noop>` class
-  attribute/method were added to ease in making ``RunPython`` and ``RunSQL``
+* The :meth:`RunPython.noop() <django.db.migrations.operations.RunPython.noop>`
+  and :attr:`RunSQL.noop <django.db.migrations.operations.RunSQL.noop>` class
+  method/attribute were added to ease in making ``RunPython`` and ``RunSQL``
   operations reversible.
 
 * The :class:`~django.db.migrations.operations.RunPython` and
@@ -911,6 +918,44 @@ Also private APIs ``django.template.base.compile_string()``,
 ``django.template.loader.find_template()``, and
 ``django.template.loader.get_template_from_string()`` were removed.
 
+``model`` attribute on private model relations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In earlier versions of Django, on a model with a reverse foreign key
+relationship (for example), ``model._meta.get_all_related_objects()`` returned
+the relationship as a ``django.db.models.related.RelatedObject`` with the
+``model`` attribute set to the source of the relationship. Now, this method
+returns the relationship as ``django.db.models.fields.related.ManyToOneRel``
+(private API ``RelatedObject`` has been removed), and the ``model`` attribute
+is set to the target of the relationship instead of the source. The source
+model is accessible on the ``related_model`` attribute instead.
+
+Consider this example from the tutorial in Django 1.8::
+
+    >>> p = Poll.objects.get(pk=1)
+    >>> p._meta.get_all_related_objects()
+    [<ManyToOneRel: polls.choice>]
+    >>> p._meta.get_all_related_objects()[0].model
+    <class 'polls.models.Poll'>
+    >>> p._meta.get_all_related_objects()[0].related_model
+    <class 'polls.models.Choice'>
+
+and compare it to the behavior on older versions::
+
+    >>> p._meta.get_all_related_objects()
+    [<RelatedObject: polls:choice related to poll>]
+    >>> p._meta.get_all_related_objects()[0].model
+    <class 'polls.models.Choice'>
+
+To access the source model, you can use a pattern like this to write code that
+will work with both Django 1.8 and older versions::
+
+    for relation in opts.get_all_related_objects():
+        to_model = getattr(relation, 'related_model', relation.model)
+
+Also note that ``get_all_related_objects()`` is deprecated in 1.8. See the
+:ref:`upgrade guide <migrating-old-meta-api>` for the new API.
+
 Database backend API
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -933,6 +978,9 @@ those writing third-party backends in updating their code:
 * The ``data_types``, ``data_types_suffix``, and
   ``data_type_check_constraints`` attributes have moved from the
   ``DatabaseCreation`` class to ``DatabaseWrapper``.
+
+* The ``SQLCompiler.as_sql()`` method now takes a ``subquery`` parameter
+  (:ticket:`24164`).
 
 :mod:`django.contrib.admin`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

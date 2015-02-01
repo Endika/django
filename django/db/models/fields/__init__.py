@@ -157,13 +157,10 @@ class Field(RegisterLookupMixin):
         self.unique_for_year = unique_for_year
         self._choices = choices or []
         self.help_text = help_text
+        self.db_index = db_index
         self.db_column = db_column
         self.db_tablespace = db_tablespace or settings.DEFAULT_INDEX_TABLESPACE
         self.auto_created = auto_created
-
-        # Set db_index to True if the field has a relationship and doesn't
-        # explicitly set db_index.
-        self.db_index = db_index
 
         # Adjust the appropriate creation counter, and save our local copy.
         if auto_created:
@@ -1894,13 +1891,13 @@ class BigIntegerField(IntegerField):
 class IPAddressField(Field):
     empty_strings_allowed = False
     description = _("IPv4 address")
-    system_check_deprecated_details = {
+    system_check_removed_details = {
         'msg': (
-            'IPAddressField has been deprecated. Support for it (except in '
-            'historical migrations) will be removed in Django 1.9.'
+            'IPAddressField has been removed except for support in '
+            'historical migrations.'
         ),
         'hint': 'Use GenericIPAddressField instead.',
-        'id': 'fields.W900',
+        'id': 'fields.E900',
     }
 
     def __init__(self, *args, **kwargs):
@@ -1920,11 +1917,6 @@ class IPAddressField(Field):
 
     def get_internal_type(self):
         return "IPAddressField"
-
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.IPAddressField}
-        defaults.update(kwargs)
-        return super(IPAddressField, self).formfield(**defaults)
 
 
 class GenericIPAddressField(Field):

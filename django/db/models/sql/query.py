@@ -24,7 +24,7 @@ from django.db.models.sql.constants import (QUERY_TERMS, ORDER_DIR, SINGLE,
         ORDER_PATTERN, INNER, LOUTER)
 from django.db.models.sql.datastructures import (
     EmptyResultSet, Empty, MultiJoin, Join, BaseTable)
-from django.db.models.sql.where import (WhereNode, Constraint, EverythingNode,
+from django.db.models.sql.where import (WhereNode, EverythingNode,
     ExtraWhere, AND, OR, EmptyWhere)
 from django.utils import six
 from django.utils.deprecation import RemovedInDjango20Warning
@@ -148,7 +148,14 @@ class Query(object):
         self.distinct_fields = []
         self.select_for_update = False
         self.select_for_update_nowait = False
+
         self.select_related = False
+        # Arbitrary limit for select_related to prevents infinite recursion.
+        self.max_depth = 5
+
+        # Holds the selects defined by a call to values() or values_list()
+        # excluding annotation_select and extra_select.
+        self.values_select = []
 
         # SQL annotation-related attributes
         # The _annotations will be an OrderedDict when used. Due to the cost
@@ -157,10 +164,6 @@ class Query(object):
         self._annotations = None  # Maps alias -> Annotation Expression
         self.annotation_select_mask = None
         self._annotation_select_cache = None
-
-        # Arbitrary maximum limit for select_related. Prevents infinite
-        # recursion. Can be changed by the depth parameter to select_related().
-        self.max_depth = 5
 
         # These are for extensions. The contents are more or less appended
         # verbatim to the appropriate clause.
@@ -230,11 +233,6 @@ class Query(object):
             raise ValueError("Need either using or connection")
         if using:
             connection = connections[using]
-
-        # Check that the compiler will be able to execute the query
-        for alias, annotation in self.annotation_select.items():
-            connection.ops.check_aggregate_support(annotation)
-
         return connection.ops.compiler(self.compiler)(self, connection, using)
 
     def get_meta(self):
@@ -278,6 +276,7 @@ class Query(object):
         obj.select_for_update = self.select_for_update
         obj.select_for_update_nowait = self.select_for_update_nowait
         obj.select_related = self.select_related
+        obj.values_select = self.values_select[:]
         obj._annotations = self._annotations.copy() if self._annotations is not None else None
         if self.annotation_select_mask is None:
             obj.annotation_select_mask = None
@@ -402,7 +401,7 @@ class Query(object):
             # Remove any aggregates marked for reduction from the subquery
             # and move them to the outer AggregateQuery.
             col_cnt = 0
-            for alias, expression in inner_query.annotation_select.items():
+            for alias, expression in list(inner_query.annotation_select.items()):
                 if expression.is_summary:
                     expression, col_cnt = inner_query.rewrite_cols(expression, col_cnt)
                     outer_query.annotations[alias] = expression.relabeled_clone(relabels)
@@ -1130,10 +1129,6 @@ class Query(object):
         clause = self.where_class()
         if reffed_aggregate:
             condition = self.build_lookup(lookups, reffed_aggregate, value)
-            if not condition:
-                # Backwards compat for custom lookups
-                assert len(lookups) == 1
-                condition = (reffed_aggregate, lookups[0], value)
             clause.add(condition, AND)
             return clause, []
 
@@ -1176,20 +1171,7 @@ class Query(object):
             else:
                 col = targets[0].get_col(alias, field)
             condition = self.build_lookup(lookups, col, value)
-            if not condition:
-                # Backwards compat for custom lookups
-                if lookups[0] not in self.query_terms:
-                    raise FieldError(
-                        "Join on field '%s' not permitted. Did you "
-                        "misspell '%s' for the lookup type?" %
-                        (col.output_field.name, lookups[0]))
-                if len(lookups) > 1:
-                    raise FieldError("Nested lookup '%s' not supported." %
-                                     LOOKUP_SEP.join(lookups))
-                condition = (Constraint(alias, targets[0].column, field), lookups[0], value)
-                lookup_type = lookups[-1]
-            else:
-                lookup_type = condition.lookup_name
+            lookup_type = condition.lookup_name
 
         clause.add(condition, AND)
 
@@ -1638,6 +1620,7 @@ class Query(object):
         columns.
         """
         self.select = []
+        self.values_select = []
 
     def add_select(self, col):
         self.default_cols = False

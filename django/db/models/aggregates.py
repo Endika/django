@@ -25,17 +25,6 @@ class Aggregate(Func):
         c._patch_aggregate(query)  # backward-compatibility support
         return c
 
-    def refs_field(self, aggregate_types, field_types):
-        try:
-            return (isinstance(self, aggregate_types) and
-                    isinstance(self.input_field._output_field_or_none, field_types))
-        except FieldError:
-            # Sometimes we don't know the input_field's output type (for example,
-            # doing Sum(F('datetimefield') + F('datefield'), output_type=DateTimeField())
-            # is OK, but the Expression(F('datetimefield') + F('datefield')) doesn't
-            # have any output field.
-            return False
-
     @property
     def input_field(self):
         return self.source_expressions[0]
@@ -105,6 +94,13 @@ class Count(Aggregate):
         super(Count, self).__init__(
             expression, distinct='DISTINCT ' if distinct else '', output_field=IntegerField(), **extra)
 
+    def __repr__(self):
+        return "{}({}, distinct={})".format(
+            self.__class__.__name__,
+            self.arg_joiner.join(str(arg) for arg in self.source_expressions),
+            'False' if self.extra['distinct'] == '' else 'True',
+        )
+
     def convert_value(self, value, connection, context):
         if value is None:
             return 0
@@ -128,6 +124,13 @@ class StdDev(Aggregate):
         self.function = 'STDDEV_SAMP' if sample else 'STDDEV_POP'
         super(StdDev, self).__init__(expression, output_field=FloatField(), **extra)
 
+    def __repr__(self):
+        return "{}({}, sample={})".format(
+            self.__class__.__name__,
+            self.arg_joiner.join(str(arg) for arg in self.source_expressions),
+            'False' if self.function == 'STDDEV_POP' else 'True',
+        )
+
     def convert_value(self, value, connection, context):
         if value is None:
             return value
@@ -145,6 +148,13 @@ class Variance(Aggregate):
     def __init__(self, expression, sample=False, **extra):
         self.function = 'VAR_SAMP' if sample else 'VAR_POP'
         super(Variance, self).__init__(expression, output_field=FloatField(), **extra)
+
+    def __repr__(self):
+        return "{}({}, sample={})".format(
+            self.__class__.__name__,
+            self.arg_joiner.join(str(arg) for arg in self.source_expressions),
+            'False' if self.function == 'VAR_POP' else 'True',
+        )
 
     def convert_value(self, value, connection, context):
         if value is None:

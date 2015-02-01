@@ -187,7 +187,7 @@ class FileUploadTests(TestCase):
         # trying such an attack.
         scary_file_names = [
             "/tmp/hax0rd.txt",          # Absolute path, *nix-style.
-            "C:\\Windows\\hax0rd.txt",  # Absolute path, win-syle.
+            "C:\\Windows\\hax0rd.txt",  # Absolute path, win-style.
             "C:/Windows/hax0rd.txt",    # Absolute path, broken-style.
             "\\tmp\\hax0rd.txt",        # Absolute path, broken in a different way.
             "/tmp\\hax0rd.txt",         # Absolute path, broken by mixing.
@@ -580,6 +580,23 @@ class MultiParserTests(unittest.TestCase):
              "foo-ä.html"),
             (b"Content-Type: application/x-stuff; title*=iso-8859-1''foo-%E4.html",
              "foo-ä.html"),
+        )
+        for raw_line, expected_title in test_data:
+            parsed = parse_header(raw_line)
+            self.assertEqual(parsed[1]['title'], expected_title)
+
+    def test_rfc2231_wrong_title(self):
+        """
+        Test wrongly formatted RFC 2231 headers (missing double single quotes).
+        Parsing should not crash (#24209).
+        """
+        test_data = (
+            (b"Content-Type: application/x-stuff; title*='This%20is%20%2A%2A%2Afun%2A%2A%2A",
+             b"'This%20is%20%2A%2A%2Afun%2A%2A%2A"),
+            (b"Content-Type: application/x-stuff; title*='foo.html",
+             b"'foo.html"),
+            (b"Content-Type: application/x-stuff; title*=bar.html",
+             b"bar.html"),
         )
         for raw_line, expected_title in test_data:
             parsed = parse_header(raw_line)

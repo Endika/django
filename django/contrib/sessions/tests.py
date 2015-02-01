@@ -24,6 +24,7 @@ from django.test.utils import patch_logger
 from django.utils import six
 from django.utils import timezone
 from django.utils.encoding import force_text
+from django.utils.six.moves import http_cookies
 
 from django.contrib.sessions.exceptions import InvalidSessionKey
 
@@ -512,7 +513,7 @@ class CacheSessionTests(SessionTestsMixin, unittest.TestCase):
         self.assertNotEqual(caches['sessions'].get(self.session.cache_key), None)
 
 
-class SessionMiddlewareTests(unittest.TestCase):
+class SessionMiddlewareTests(TestCase):
 
     @override_settings(SESSION_COOKIE_SECURE=True)
     def test_secure_session_cookie(self):
@@ -543,7 +544,7 @@ class SessionMiddlewareTests(unittest.TestCase):
         response = middleware.process_response(request, response)
         self.assertTrue(
             response.cookies[settings.SESSION_COOKIE_NAME]['httponly'])
-        self.assertIn('httponly',
+        self.assertIn(http_cookies.Morsel._reserved['httponly'],
             str(response.cookies[settings.SESSION_COOKIE_NAME]))
 
     @override_settings(SESSION_COOKIE_HTTPONLY=False)
@@ -560,7 +561,7 @@ class SessionMiddlewareTests(unittest.TestCase):
         response = middleware.process_response(request, response)
         self.assertFalse(response.cookies[settings.SESSION_COOKIE_NAME]['httponly'])
 
-        self.assertNotIn('httponly',
+        self.assertNotIn(http_cookies.Morsel._reserved['httponly'],
                          str(response.cookies[settings.SESSION_COOKIE_NAME]))
 
     def test_session_save_on_500(self):
@@ -604,7 +605,8 @@ class SessionMiddlewareTests(unittest.TestCase):
         )
 
 
-class CookieSessionTests(SessionTestsMixin, TestCase):
+# Don't need DB flushing for these tests, so can use unittest.TestCase as base class
+class CookieSessionTests(SessionTestsMixin, unittest.TestCase):
 
     backend = CookieSession
 

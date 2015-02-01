@@ -1,3 +1,5 @@
+from django.db.models.aggregates import StdDev
+from django.db.models.expressions import Value
 from django.db.utils import ProgrammingError
 from django.utils.functional import cached_property
 
@@ -123,6 +125,9 @@ class BaseDatabaseFeatures(object):
     # This is True for all core backends.
     can_introspect_null = True
 
+    # Can the backend introspect the default value of a column?
+    can_introspect_default = True
+
     # Confirm support for introspected foreign keys
     # Every database can do this reliably, except MySQL,
     # which can't do it for MyISAM tables
@@ -226,12 +231,8 @@ class BaseDatabaseFeatures(object):
     @cached_property
     def supports_stddev(self):
         """Confirm support for STDDEV and related stats functions."""
-        class StdDevPop(object):
-            contains_aggregate = True
-            sql_function = 'STDDEV_POP'
-
         try:
-            self.connection.ops.check_aggregate_support(StdDevPop())
+            self.connection.ops.check_expression_support(StdDev(Value(1)))
             return True
         except NotImplementedError:
             return False

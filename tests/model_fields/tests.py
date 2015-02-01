@@ -75,7 +75,7 @@ class BasicFieldTests(test.TestCase):
 
     def test_field_verbose_name(self):
         m = VerboseNameField
-        for i in range(1, 23):
+        for i in range(1, 22):
             self.assertEqual(m._meta.get_field('field%d' % i).verbose_name,
                              'verbose field%d' % i)
 
@@ -333,7 +333,7 @@ class BooleanFieldTests(unittest.TestCase):
 
         # Test select_related('fk_field_name')
         ma = FksToBooleans.objects.select_related('bf').get(pk=m1.id)
-        # verify types -- should't be 0/1
+        # verify types -- shouldn't be 0/1
         self.assertIsInstance(ma.bf.bfield, bool)
         self.assertIsInstance(ma.nbf.nbfield, bool)
         # verify values
@@ -818,22 +818,6 @@ class PromiseTest(test.TestCase):
         self.assertIsInstance(
             IPAddressField().get_prep_value(lazy_func()),
             six.text_type)
-
-    def test_IPAddressField_deprecated(self):
-        class IPAddressModel(models.Model):
-            ip = IPAddressField()
-
-        model = IPAddressModel()
-        self.assertEqual(
-            model.check(),
-            [checks.Warning(
-                'IPAddressField has been deprecated. Support for it '
-                '(except in historical migrations) will be removed in Django 1.9.',
-                hint='Use GenericIPAddressField instead.',
-                obj=IPAddressModel._meta.get_field('ip'),
-                id='fields.W900',
-            )],
-        )
 
     def test_GenericIPAddressField(self):
         lazy_func = lazy(lambda: '127.0.0.1', six.text_type)

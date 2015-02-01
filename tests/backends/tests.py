@@ -127,12 +127,19 @@ class SQLiteTests(TestCase):
         #19360: Raise NotImplementedError when aggregating on date/time fields.
         """
         for aggregate in (Sum, Avg, Variance, StdDev):
-            self.assertRaises(NotImplementedError,
+            self.assertRaises(
+                NotImplementedError,
                 models.Item.objects.all().aggregate, aggregate('time'))
-            self.assertRaises(NotImplementedError,
+            self.assertRaises(
+                NotImplementedError,
                 models.Item.objects.all().aggregate, aggregate('date'))
-            self.assertRaises(NotImplementedError,
+            self.assertRaises(
+                NotImplementedError,
                 models.Item.objects.all().aggregate, aggregate('last_modified'))
+            self.assertRaises(
+                NotImplementedError,
+                models.Item.objects.all().aggregate,
+                **{'complex': aggregate('last_modified') + aggregate('last_modified')})
 
 
 @unittest.skipUnless(connection.vendor == 'postgresql', "Test only for PostgreSQL")
@@ -771,7 +778,7 @@ class FkConstraintsTests(TransactionTestCase):
         models.Article.objects.create(headline='Another article',
                                       pub_date=datetime.datetime(1988, 5, 15),
                                       reporter=self.r, reporter_proxy=r_proxy)
-        # Retreive the second article from the DB
+        # Retrieve the second article from the DB
         a2 = models.Article.objects.get(headline='Another article')
         a2.reporter_proxy_id = 30
         self.assertRaises(IntegrityError, a2.save)

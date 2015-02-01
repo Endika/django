@@ -7,6 +7,19 @@ in a backward incompatible way, following their deprecation, as per the
 :ref:`deprecation policy <internal-release-deprecation-policy>`. More details
 about each item can often be found in the release notes of two versions prior.
 
+.. _deprecation-removed-in-2.1:
+
+2.1
+---
+
+See the :ref:`Django 1.9 release notes<deprecated-features-1.9>` for more
+details on these changes.
+
+* The ``weak`` argument to ``django.dispatch.signals.Signal.disconnect()`` will
+  be removed.
+
+* The ``django.forms.extras`` package will be removed.
+
 .. _deprecation-removed-in-2.0:
 
 2.0
@@ -297,6 +310,9 @@ details on these changes.
 * Private API ``django.test.utils.TestTemplateLoader`` will be removed.
 
 * The ``django.contrib.contenttypes.generic`` module will be removed.
+
+* Private APIs ``django.db.models.sql.where.WhereNode.make_atom()`` and
+  ``django.db.models.sql.where.Constraint`` will be removed.
 
 .. _deprecation-removed-in-1.8:
 

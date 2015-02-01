@@ -165,19 +165,49 @@ Backwards incompatible changes in 1.9
     deprecation timeline for a given feature, its removal may appear as a
     backwards incompatible change.
 
-...
+Database backend API
+~~~~~~~~~~~~~~~~~~~~
+
+* A couple of new tests rely on the ability of the backend to introspect column
+  defaults (returning the result as ``Field.default``). You can set the
+  ``can_introspect_default`` database feature to ``False`` if your backend
+  doesn't implement this. You may want to review the implementation on the
+  backends that Django includes for reference (:ticket:`24245`).
 
 Miscellaneous
 ~~~~~~~~~~~~~
 
-* ...
+* CSS and images in ``contrib.admin`` to support Internet Explorer 6 & 7 have
+  been removed as these browsers have reached end-of-life.
+
+* ``django.http.responses.REASON_PHRASES`` and
+  ``django.core.handlers.wsgi.STATUS_CODE_TEXT`` have been removed. Use
+  Python's stdlib instead: :data:`http.client.responses` for Python 3 and
+  `httplib.responses`_ for Python 2.
+
+  .. _`httplib.responses`: https://docs.python.org/2/library/httplib.html#httplib.responses
+
+* ``ValuesQuerySet`` and ``ValuesListQuerySet`` have been removed.
 
 .. _deprecated-features-1.9:
 
 Features deprecated in 1.9
 ==========================
 
-...
+Miscellaneous
+~~~~~~~~~~~~~
+
+* The ``weak`` argument to ``django.dispatch.signals.Signal.disconnect()`` has
+  been deprecated as it has no effect.
+
+* The ``check_aggregate_support()`` method of
+  ``django.db.backends.base.BaseDatabaseOperations`` has been deprecated and
+  will be removed in Django 2.1. The more general ``check_expression_support()``
+  should be used instead.
+
+* ``django.forms.extras`` is deprecated. You can find
+  :class:`~django.forms.SelectDateWidget` in ``django.forms.widgets``
+  (or simply ``django.forms``) instead.
 
 .. removed-features-1.9:
 

@@ -637,7 +637,7 @@ Forms
   value.
 
 * :attr:`SelectDateWidget.months
-  <django.forms.extras.widgets.SelectDateWidget.months>` can be used to
+  <django.forms.SelectDateWidget.months>` can be used to
   customize the wording of the months displayed in the select widget.
 
 * The ``min_num`` and ``validate_min`` parameters were added to
@@ -1378,7 +1378,7 @@ Miscellaneous
   the current class *and* on a parent ``Form``.
 
 * The ``required`` argument of
-  :class:`~django.forms.extras.widgets.SelectDateWidget` has been removed.
+  :class:`~django.forms.SelectDateWidget` has been removed.
   This widget now respects the form field's ``is_required`` attribute like
   other widgets.
 
@@ -1591,8 +1591,8 @@ better handle the case of selectively showing inlines on a ``ModelAdmin``.
 ``IPAddressField``
 ~~~~~~~~~~~~~~~~~~
 
-The :class:`django.db.models.IPAddressField` and
-:class:`django.forms.IPAddressField` fields have been deprecated in favor of
+The ``django.db.models.IPAddressField`` and ``django.forms.IPAddressField``
+fields have been deprecated in favor of
 :class:`django.db.models.GenericIPAddressField` and
 :class:`django.forms.GenericIPAddressField`.
 
@@ -1778,6 +1778,13 @@ Django 1.9.
 
 Django no longer uses this functional internally. Even though it's a private
 API, it'll go through the normal deprecation cycle.
+
+Private Query Lookup APIs
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Private APIs ``django.db.models.sql.where.WhereNode.make_atom()`` and
+``django.db.models.sql.where.Constraint`` are deprecated in favor of the new
+:doc:`custom lookups API </ref/models/lookups>`.
 
 .. removed-features-1.7:
 

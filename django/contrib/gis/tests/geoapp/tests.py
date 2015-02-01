@@ -5,7 +5,6 @@ from tempfile import NamedTemporaryFile
 
 from django.db import connection
 from django.contrib.gis import gdal
-from django.contrib.gis.db.models import Extent, MakeLine, Union
 from django.contrib.gis.geos import HAS_GEOS
 from django.contrib.gis.tests.utils import no_oracle, oracle, postgis, spatialite
 from django.core.management import call_command
@@ -14,6 +13,7 @@ from django.utils import six
 from django.utils.deprecation import RemovedInDjango20Warning
 
 if HAS_GEOS:
+    from django.contrib.gis.db.models import Extent, MakeLine, Union
     from django.contrib.gis.geos import (fromstr, GEOSGeometry,
         Point, LineString, LinearRing, Polygon, GeometryCollection)
     from .models import Country, City, PennsylvaniaCity, State, Track, NonConcreteModel, Feature, MinusOneSRID
@@ -456,7 +456,7 @@ class GeoQuerySetTest(TestCase):
         geom = Point(5, 23)
         qs = Country.objects.all().difference(geom).sym_difference(geom).union(geom)
 
-        # XXX For some reason SpatiaLite does something screwey with the Texas geometry here.  Also,
+        # XXX For some reason SpatiaLite does something screwy with the Texas geometry here.  Also,
         # XXX it doesn't like the null intersection.
         if spatialite:
             qs = qs.exclude(name='Texas')
@@ -599,7 +599,7 @@ class GeoQuerySetTest(TestCase):
     @skipUnlessDBFeature("has_gml_method")
     def test_gml(self):
         "Testing GML output from the database using GeoQuerySet.gml()."
-        # Should throw a TypeError when tyring to obtain GML from a
+        # Should throw a TypeError when trying to obtain GML from a
         # non-geometry field.
         qs = City.objects.all()
         self.assertRaises(TypeError, qs.gml, field_name='name')
@@ -889,6 +889,21 @@ class GeoQuerySetTest(TestCase):
         qs = City.objects.filter(name='NotACity')
         self.assertIsNone(qs.unionagg(field_name='point'))
         self.assertIsNone(qs.aggregate(Union('point'))['point__union'])
+
+    def test_within_subquery(self):
+        """
+        Test that using a queryset inside a geo lookup is working (using a subquery)
+        (#14483).
+        """
+        tex_cities = City.objects.filter(
+            point__within=Country.objects.filter(name='Texas').values('mpoly')).order_by('name')
+        expected = ['Dallas', 'Houston']
+        if not connection.features.supports_real_shape_operations:
+            expected.append('Oklahoma City')
+        self.assertEqual(
+            list(tex_cities.values_list('name', flat=True)),
+            expected
+        )
 
     def test_non_concrete_field(self):
         NonConcreteModel.objects.create(point=Point(0, 0), name='name')

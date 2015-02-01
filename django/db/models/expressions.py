@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 
-class CombinableMixin(object):
+class Combinable(object):
     """
     Provides the ability to combine one or two objects with
     some connector. For example F('foo') + F('bar').
@@ -184,6 +184,7 @@ class BaseExpression(object):
            in this query
          * reuse: a set of reusable joins for multijoins
          * summarize: a terminal aggregate clause
+         * for_save: whether this expression about to be used in a save or update
 
         Returns: an ExpressionNode to be added to the query.
         """
@@ -297,17 +298,6 @@ class BaseExpression(object):
                 return agg, lookup
         return False, ()
 
-    def refs_field(self, aggregate_types, field_types):
-        """
-        Helper method for check_aggregate_support on backends
-        """
-        return any(
-            node.refs_field(aggregate_types, field_types)
-            for node in self.get_source_expressions())
-
-    def prepare_database_save(self, field):
-        return self
-
     def get_group_by_cols(self):
         if not self.contains_aggregate:
             return [self]
@@ -333,7 +323,7 @@ class BaseExpression(object):
         return self
 
 
-class ExpressionNode(BaseExpression, CombinableMixin):
+class ExpressionNode(BaseExpression, Combinable):
     """
     An expression that can be combined with other expressions.
     """
@@ -347,6 +337,12 @@ class Expression(ExpressionNode):
         self.connector = connector
         self.lhs = lhs
         self.rhs = rhs
+
+    def __repr__(self):
+        return "<{}: {}>".format(self.__class__.__name__, self)
+
+    def __str__(self):
+        return "{} {} {}".format(self.lhs, self.connector, self.rhs)
 
     def get_source_expressions(self):
         return [self.lhs, self.rhs]
@@ -401,6 +397,7 @@ class DurationExpression(Expression):
         return compiler.compile(side)
 
     def as_sql(self, compiler, connection):
+        connection.ops.check_expression_support(self)
         expressions = []
         expression_params = []
         sql, params = self.compile(self.lhs, compiler, connection)
@@ -415,7 +412,7 @@ class DurationExpression(Expression):
         return expression_wrapper % sql, expression_params
 
 
-class F(CombinableMixin):
+class F(Combinable):
     """
     An object capable of resolving references to existing query objects.
     """
@@ -425,6 +422,9 @@ class F(CombinableMixin):
          * name: the name of the field this expression references
         """
         self.name = name
+
+    def __repr__(self):
+        return "{}({})".format(self.__class__.__name__, self.name)
 
     def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         return query.resolve_ref(self.name, allow_joins, reuse, summarize)
@@ -453,6 +453,13 @@ class Func(ExpressionNode):
         self.source_expressions = self._parse_expressions(*expressions)
         self.extra = extra
 
+    def __repr__(self):
+        args = self.arg_joiner.join(str(arg) for arg in self.source_expressions)
+        extra = ', '.join(str(key) + '=' + str(val) for key, val in self.extra.items())
+        if extra:
+            return "{}({}, {})".format(self.__class__.__name__, args, extra)
+        return "{}({})".format(self.__class__.__name__, args)
+
     def get_source_expressions(self):
         return self.source_expressions
 
@@ -473,6 +480,7 @@ class Func(ExpressionNode):
         return c
 
     def as_sql(self, compiler, connection, function=None, template=None):
+        connection.ops.check_expression_support(self)
         sql_parts = []
         params = []
         for arg in self.source_expressions:
@@ -510,7 +518,11 @@ class Value(ExpressionNode):
         super(Value, self).__init__(output_field=output_field)
         self.value = value
 
+    def __repr__(self):
+        return "{}({})".format(self.__class__.__name__, self.value)
+
     def as_sql(self, compiler, connection):
+        connection.ops.check_expression_support(self)
         val = self.value
         # check _output_field to avoid triggering an exception
         if self._output_field is not None:
@@ -536,6 +548,7 @@ class Value(ExpressionNode):
 
 class DurationValue(Value):
     def as_sql(self, compiler, connection):
+        connection.ops.check_expression_support(self)
         if (connection.features.has_native_duration_field and
                 connection.features.driver_supports_timedelta_args):
             return super(DurationValue, self).as_sql(compiler, connection)
@@ -549,6 +562,9 @@ class RawSQL(ExpressionNode):
         self.sql, self.params = sql, params
         super(RawSQL, self).__init__(output_field=output_field)
 
+    def __repr__(self):
+        return "{}({}, {})".format(self.__class__.__name__, self.sql, self.params)
+
     def as_sql(self, compiler, connection):
         return '(%s)' % self.sql, self.params
 
@@ -560,6 +576,9 @@ class Random(ExpressionNode):
     def __init__(self):
         super(Random, self).__init__(output_field=fields.FloatField())
 
+    def __repr__(self):
+        return "Random()"
+
     def as_sql(self, compiler, connection):
         return connection.ops.random_function_sql(), []
 
@@ -570,6 +589,10 @@ class Col(ExpressionNode):
             source = target
         super(Col, self).__init__(output_field=source)
         self.alias, self.target = alias, target
+
+    def __repr__(self):
+        return "{}({}, {})".format(
+            self.__class__.__name__, self.alias, self.target)
 
     def as_sql(self, compiler, connection):
         qn = compiler.quote_name_unless_alias
@@ -592,8 +615,10 @@ class Ref(ExpressionNode):
     """
     def __init__(self, refs, source):
         super(Ref, self).__init__()
-        self.source = source
-        self.refs = refs
+        self.refs, self.source = refs, source
+
+    def __repr__(self):
+        return "{}({}, {})".format(self.__class__.__name__, self.refs, self.source)
 
     def get_source_expressions(self):
         return [self.source]
@@ -650,6 +675,7 @@ class When(ExpressionNode):
         return c
 
     def as_sql(self, compiler, connection, template=None):
+        connection.ops.check_expression_support(self)
         template_params = {}
         sql_params = []
         condition_sql, condition_params = compiler.compile(self.condition)
@@ -715,6 +741,7 @@ class Case(ExpressionNode):
         return c
 
     def as_sql(self, compiler, connection, template=None, extra=None):
+        connection.ops.check_expression_support(self)
         if not self.cases:
             return compiler.compile(self.default)
         template_params = dict(extra) if extra else {}
@@ -744,6 +771,9 @@ class Date(ExpressionNode):
         self.lookup = lookup
         self.col = None
         self.lookup_type = lookup_type
+
+    def __repr__(self):
+        return "{}({}, {})".format(self.__class__.__name__, self.lookup, self.lookup_type)
 
     def get_source_expressions(self):
         return [self.col]
@@ -794,6 +824,10 @@ class DateTime(ExpressionNode):
             self.tzname = timezone._get_timezone_name(tzinfo)
         self.tzinfo = tzinfo
 
+    def __repr__(self):
+        return "{}({}, {}, {})".format(
+            self.__class__.__name__, self.lookup, self.lookup_type, self.tzinfo)
+
     def get_source_expressions(self):
         return [self.col]
 
@@ -835,14 +869,16 @@ class DateTime(ExpressionNode):
 
 class OrderBy(BaseExpression):
     template = '%(expression)s %(ordering)s'
-    descending_template = 'DESC'
-    ascending_template = 'ASC'
 
     def __init__(self, expression, descending=False):
         self.descending = descending
         if not hasattr(expression, 'resolve_expression'):
             raise ValueError('expression must be an expression type')
         self.expression = expression
+
+    def __repr__(self):
+        return "{}({}, descending={})".format(
+            self.__class__.__name__, self.expression, self.descending)
 
     def set_source_expressions(self, exprs):
         self.expression = exprs[0]
@@ -851,6 +887,7 @@ class OrderBy(BaseExpression):
         return [self.expression]
 
     def as_sql(self, compiler, connection):
+        connection.ops.check_expression_support(self)
         expression_sql, params = compiler.compile(self.expression)
         placeholders = {'expression': expression_sql}
         placeholders['ordering'] = 'DESC' if self.descending else 'ASC'
