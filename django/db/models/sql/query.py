@@ -1390,11 +1390,6 @@ class Query(object):
                 break
         return path, final_field, targets, names[pos + 1:]
 
-    def raise_field_error(self, opts, name):
-        available = list(get_field_names_from_opts(opts)) + list(self.annotation_select)
-        raise FieldError("Cannot resolve keyword %r into field. "
-                         "Choices are: %s" % (name, ", ".join(available)))
-
     def setup_joins(self, names, opts, alias, can_reuse=None, allow_many=True):
         """
         Compute the necessary table joins for the passage through the fields
@@ -2036,17 +2031,6 @@ def is_reverse_o2o(field):
     expected to be some sort of relation field or related object.
     """
     return not hasattr(field, 'rel') and field.field.unique
-
-
-def alias_diff(refcounts_before, refcounts_after):
-    """
-    Given the before and after copies of refcounts works out which aliases
-    have been added to the after copy.
-    """
-    # Use -1 as default value so that any join that is created, then trimmed
-    # is seen as added.
-    return set(t for t in refcounts_after
-               if refcounts_after[t] > refcounts_before.get(t, -1))
 
 
 class JoinPromoter(object):

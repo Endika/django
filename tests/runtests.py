@@ -35,6 +35,7 @@ os.environ['DJANGO_TEST_TEMP_DIR'] = TEMP_DIR
 
 SUBDIRS_TO_SKIP = [
     'data',
+    'import_error_package',
     'test_discovery_sample',
     'test_discovery_sample2',
     'test_runner_deprecation_app',
@@ -50,13 +51,13 @@ ALWAYS_INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
-ALWAYS_MIDDLEWARE_CLASSES = (
+ALWAYS_MIDDLEWARE_CLASSES = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-)
+]
 
 
 def get_test_modules():
@@ -73,7 +74,6 @@ def get_test_modules():
     for modpath, dirpath in discovery_paths:
         for f in os.listdir(dirpath):
             if ('.' in f or
-                    f.startswith('sql') or
                     os.path.basename(f) in SUBDIRS_TO_SKIP or
                     os.path.isfile(f) or
                     not os.path.exists(os.path.join(dirpath, f, '__init__.py'))):
@@ -116,7 +116,7 @@ def setup(verbosity, test_labels):
     settings.STATIC_URL = '/static/'
     settings.STATIC_ROOT = os.path.join(TEMP_DIR, 'static')
     # Remove the following line in Django 2.0.
-    settings.TEMPLATE_DIRS = (TEMPLATE_DIR,)
+    settings.TEMPLATE_DIRS = [TEMPLATE_DIR]
     settings.TEMPLATES = [{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [TEMPLATE_DIR],

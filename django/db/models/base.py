@@ -771,6 +771,9 @@ class Model(six.with_metaclass(ModelBase)):
                        if f.name in update_fields or f.attname in update_fields]
 
         pk_val = self._get_pk_val(meta)
+        if pk_val is None:
+            pk_val = meta.pk.get_pk_value_on_save(self)
+            setattr(self, meta.pk.attname, pk_val)
         pk_set = pk_val is not None
         if not pk_set and (force_update or update_fields):
             raise ValueError("Cannot force an update in save() with no primary key.")
@@ -935,7 +938,7 @@ class Model(six.with_metaclass(ModelBase)):
         unique_checks = []
 
         unique_togethers = [(self.__class__, self._meta.unique_together)]
-        for parent_class in self._meta.parents.keys():
+        for parent_class in self._meta.get_parent_list():
             if parent_class._meta.unique_together:
                 unique_togethers.append((parent_class, parent_class._meta.unique_together))
 
@@ -955,7 +958,7 @@ class Model(six.with_metaclass(ModelBase)):
         # the list of checks.
 
         fields_with_class = [(self.__class__, self._meta.local_fields)]
-        for parent_class in self._meta.parents.keys():
+        for parent_class in self._meta.get_parent_list():
             fields_with_class.append((parent_class, parent_class._meta.local_fields))
 
         for model_class, fields in fields_with_class:
