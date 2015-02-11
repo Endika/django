@@ -5,7 +5,7 @@ from django.core import exceptions, serializers
 from django.db import models
 from django.test import TestCase
 
-from .models import UUIDModel, NullableUUIDModel, PrimaryKeyUUIDModel
+from .models import NullableUUIDModel, PrimaryKeyUUIDModel, UUIDModel
 
 
 class TestSaveLoad(TestCase):
@@ -33,6 +33,14 @@ class TestSaveLoad(TestCase):
         NullableUUIDModel.objects.create(field=None)
         loaded = NullableUUIDModel.objects.get()
         self.assertEqual(loaded.field, None)
+
+
+class TestMigrations(TestCase):
+
+    def test_deconstruct(self):
+        field = models.UUIDField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(kwargs, {})
 
 
 class TestQuerying(TestCase):

@@ -1,33 +1,34 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from importlib import import_module
 import itertools
 import re
+from importlib import import_module
 
 from django.apps import apps
 from django.conf import settings
-from django.contrib.sites.requests import RequestSite
 from django.contrib.admin.models import LogEntry
-from django.contrib.auth import SESSION_KEY, REDIRECT_FIELD_NAME
-from django.contrib.auth.forms import (AuthenticationForm, PasswordChangeForm,
-    SetPasswordForm)
+from django.contrib.auth import REDIRECT_FIELD_NAME, SESSION_KEY
+from django.contrib.auth.forms import (
+    AuthenticationForm, PasswordChangeForm, SetPasswordForm,
+)
 from django.contrib.auth.models import User
 from django.contrib.auth.views import login as login_view, redirect_to_login
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.sites.requests import RequestSite
 from django.core import mail
 from django.core.urlresolvers import NoReverseMatch, reverse, reverse_lazy
-from django.http import QueryDict, HttpRequest
-from django.utils.deprecation import RemovedInDjango20Warning
-from django.utils.encoding import force_text
-from django.utils.http import urlquote
-from django.utils.six.moves.urllib.parse import urlparse, ParseResult
-from django.utils.translation import LANGUAGE_SESSION_KEY
+from django.http import HttpRequest, QueryDict
+from django.middleware.csrf import CsrfViewMiddleware
 from django.test import (
     TestCase, ignore_warnings, modify_settings, override_settings,
 )
 from django.test.utils import patch_logger
-from django.middleware.csrf import CsrfViewMiddleware
-from django.contrib.sessions.middleware import SessionMiddleware
+from django.utils.deprecation import RemovedInDjango20Warning
+from django.utils.encoding import force_text
+from django.utils.http import urlquote
+from django.utils.six.moves.urllib.parse import ParseResult, urlparse
+from django.utils.translation import LANGUAGE_SESSION_KEY
 
 # Needed so model is installed when tests are run independently:
 from .custom_user import CustomUser  # NOQA
@@ -860,32 +861,39 @@ class ChangelistTests(AuthViewsTestCase):
     def test_changelist_disallows_password_lookups(self):
         # A lookup that tries to filter on password isn't OK
         with patch_logger('django.security.DisallowedModelAdminLookup', 'error') as logger_calls:
-            response = self.client.get('/admin/auth/user/?password__startswith=sha1$')
+            response = self.client.get(reverse('auth_test_admin:auth_user_changelist') + '?password__startswith=sha1$')
             self.assertEqual(response.status_code, 400)
             self.assertEqual(len(logger_calls), 1)
 
     def test_user_change_email(self):
         data = self.get_user_data(self.admin)
         data['email'] = 'new_' + data['email']
-        response = self.client.post('/admin/auth/user/%s/' % self.admin.pk, data)
-        self.assertRedirects(response, '/admin/auth/user/')
+        response = self.client.post(
+            reverse('auth_test_admin:auth_user_change', args=(self.admin.pk,)),
+            data
+        )
+        self.assertRedirects(response, reverse('auth_test_admin:auth_user_changelist'))
         row = LogEntry.objects.latest('id')
         self.assertEqual(row.change_message, 'Changed email.')
 
     def test_user_not_change(self):
-        response = self.client.post('/admin/auth/user/%s/' % self.admin.pk,
+        response = self.client.post(
+            reverse('auth_test_admin:auth_user_change', args=(self.admin.pk,)),
             self.get_user_data(self.admin)
         )
-        self.assertRedirects(response, '/admin/auth/user/')
+        self.assertRedirects(response, reverse('auth_test_admin:auth_user_changelist'))
         row = LogEntry.objects.latest('id')
         self.assertEqual(row.change_message, 'No fields changed.')
 
     def test_user_change_password(self):
-        response = self.client.post('/admin/auth/user/%s/password/' % self.admin.pk, {
-            'password1': 'password1',
-            'password2': 'password1',
-        })
-        self.assertRedirects(response, '/admin/auth/user/%s/' % self.admin.pk)
+        response = self.client.post(
+            reverse('auth_test_admin:auth_user_password_change', args=(self.admin.pk,)),
+            {
+                'password1': 'password1',
+                'password2': 'password1',
+            }
+        )
+        self.assertRedirects(response, reverse('auth_test_admin:auth_user_change', args=(self.admin.pk,)))
         row = LogEntry.objects.latest('id')
         self.assertEqual(row.change_message, 'Changed password.')
         self.logout()
@@ -893,11 +901,14 @@ class ChangelistTests(AuthViewsTestCase):
 
     def test_user_change_different_user_password(self):
         u = User.objects.get(email='staffmember@example.com')
-        response = self.client.post('/admin/auth/user/%s/password/' % u.pk, {
-            'password1': 'password1',
-            'password2': 'password1',
-        })
-        self.assertRedirects(response, '/admin/auth/user/%s/' % u.pk)
+        response = self.client.post(
+            reverse('auth_test_admin:auth_user_password_change', args=(u.pk,)),
+            {
+                'password1': 'password1',
+                'password2': 'password1',
+            }
+        )
+        self.assertRedirects(response, reverse('auth_test_admin:auth_user_change', args=(u.pk,)))
         row = LogEntry.objects.latest('id')
         self.assertEqual(row.user_id, self.admin.pk)
         self.assertEqual(row.object_id, str(u.pk))

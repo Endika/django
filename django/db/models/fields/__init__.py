@@ -1689,6 +1689,13 @@ class DurationField(Field):
         val = self._get_val_from_obj(obj)
         return '' if val is None else duration_string(val)
 
+    def formfield(self, **kwargs):
+        defaults = {
+            'form_class': forms.DurationField,
+        }
+        defaults.update(kwargs)
+        return super(DurationField, self).formfield(**defaults)
+
 
 class EmailField(CharField):
     default_validators = [validators.validate_email]
@@ -2365,6 +2372,11 @@ class UUIDField(Field):
     def __init__(self, **kwargs):
         kwargs['max_length'] = 32
         super(UUIDField, self).__init__(**kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(UUIDField, self).deconstruct()
+        del kwargs['max_length']
+        return name, path, args, kwargs
 
     def get_internal_type(self):
         return "UUIDField"

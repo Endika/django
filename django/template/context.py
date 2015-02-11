@@ -1,8 +1,7 @@
-from copy import copy
 import warnings
+from copy import copy
 
 from django.utils.deprecation import RemovedInDjango20Warning
-
 
 # Hard-coded processor for easier use of CSRF protection.
 _builtin_context_processors = ('django.template.context_processors.csrf',)
@@ -232,5 +231,22 @@ class RequestContext(Context):
         new_context = super(RequestContext, self).new(values)
         # This is for backwards-compatibility: RequestContexts created via
         # Context.new don't include values from context processors.
-        del new_context._processors_index
+        if hasattr(new_context, '_processors_index'):
+            del new_context._processors_index
         return new_context
+
+
+def make_context(context, request=None):
+    """
+    Create a suitable Context from a plain dict and optionally an HttpRequest.
+    """
+    if request is None:
+        context = Context(context)
+    else:
+        # The following pattern is required to ensure values from
+        # context override those from template context processors.
+        original_context = context
+        context = RequestContext(request)
+        if original_context:
+            context.push(original_context)
+    return context

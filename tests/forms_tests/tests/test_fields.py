@@ -27,34 +27,32 @@ __init__(). For example, CharField has a max_length option.
 from __future__ import unicode_literals
 
 import datetime
+import os
 import pickle
 import re
-import os
 import uuid
 from decimal import Decimal
 from unittest import skipIf
-
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms import (
     BooleanField, CharField, ChoiceField, ComboField, DateField, DateTimeField,
     DecimalField, DurationField, EmailField, Field, FileField, FilePathField,
-    FloatField, Form, forms, GenericIPAddressField, HiddenInput, ImageField,
+    FloatField, Form, GenericIPAddressField, HiddenInput, ImageField,
     IntegerField, MultipleChoiceField, NullBooleanField, NumberInput,
     PasswordInput, RadioSelect, RegexField, SlugField, SplitDateTimeField,
-    TextInput, Textarea, TimeField, TypedChoiceField, TypedMultipleChoiceField,
-    URLField, UUIDField, ValidationError, Widget,
+    Textarea, TextInput, TimeField, TypedChoiceField, TypedMultipleChoiceField,
+    URLField, UUIDField, ValidationError, Widget, forms,
 )
 from django.test import SimpleTestCase, ignore_warnings
-from django.utils import formats
-from django.utils import six
-from django.utils import translation
-from django.utils.deprecation import RemovedInDjango20Warning
+from django.utils import formats, six, translation
 from django.utils._os import upath
+from django.utils.deprecation import RemovedInDjango20Warning
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 
 def fix_os_paths(x):
@@ -405,6 +403,13 @@ class FieldsTests(SimpleTestCase):
         f = DecimalField(max_digits=2, decimal_places=2)
         self.assertEqual(f.clean('.01'), Decimal(".01"))
         self.assertRaisesMessage(ValidationError, "'Ensure that there are no more than 0 digits before the decimal point.'", f.clean, '1.1')
+
+    def test_decimalfield_scientific(self):
+        f = DecimalField(max_digits=2, decimal_places=2)
+        self.assertEqual(f.clean('1E+2'), Decimal('1E+2'))
+        self.assertEqual(f.clean('1e+2'), Decimal('1E+2'))
+        with self.assertRaisesMessage(ValidationError, "Ensure that there are no more"):
+            f.clean('0.546e+2')
 
     def test_decimalfield_widget_attrs(self):
         f = DecimalField(max_digits=6, decimal_places=2)

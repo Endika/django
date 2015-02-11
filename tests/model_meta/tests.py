@@ -1,13 +1,15 @@
 from django.apps import apps
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey, GenericRelation,
+)
 from django.core.exceptions import FieldDoesNotExist
-from django.db.models.fields import related, CharField, Field
-from django.db.models.options import IMMUTABLE_WARNING, EMPTY_RELATION_TREE
+from django.db.models.fields import CharField, Field, related
+from django.db.models.options import EMPTY_RELATION_TREE, IMMUTABLE_WARNING
 from django.test import TestCase
 
 from .models import (
-    Relation, AbstractPerson, BasePerson, Person, ProxyPerson, Relating,
-    CommonAncestor, FirstParent, SecondParent, Child
+    AbstractPerson, BasePerson, Child, CommonAncestor, FirstParent, Person,
+    ProxyPerson, Relating, Relation, SecondParent,
 )
 from .results import TEST_RESULTS
 
@@ -176,7 +178,7 @@ class GetFieldByNameTests(OptionsBaseTests):
         opts = Person._meta
         # If apps registry is not ready, get_field() searches over only
         # forward fields.
-        opts.apps.ready = False
+        opts.apps.models_ready = False
         try:
             # 'data_abstract' is a forward field, and therefore will be found
             self.assertTrue(opts.get_field('data_abstract'))
@@ -189,7 +191,7 @@ class GetFieldByNameTests(OptionsBaseTests):
             with self.assertRaisesMessage(FieldDoesNotExist, msg):
                 opts.get_field('relating_baseperson')
         finally:
-            opts.apps.ready = True
+            opts.apps.models_ready = True
 
 
 class RelationTreeTests(TestCase):

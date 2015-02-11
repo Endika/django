@@ -1,13 +1,13 @@
 import os
-import time
 import threading
+import time
 import warnings
 
 from django.conf import settings
 from django.core.signals import setting_changed
 from django.db import connections, router
 from django.db.utils import ConnectionRouter
-from django.dispatch import receiver, Signal
+from django.dispatch import Signal, receiver
 from django.utils import timezone
 from django.utils.functional import empty
 
@@ -156,3 +156,24 @@ def root_urlconf_changed(**kwargs):
         from django.core.urlresolvers import clear_url_caches, set_urlconf
         clear_url_caches()
         set_urlconf(None)
+
+
+@receiver(setting_changed)
+def static_storage_changed(**kwargs):
+    if kwargs['setting'] in {
+        'STATICFILES_STORAGE',
+        'STATIC_ROOT',
+        'STATIC_URL',
+    }:
+        from django.contrib.staticfiles.storage import staticfiles_storage
+        staticfiles_storage._wrapped = empty
+
+
+@receiver(setting_changed)
+def static_finders_changed(**kwargs):
+    if kwargs['setting'] in {
+        'STATICFILES_DIRS',
+        'STATIC_ROOT',
+    }:
+        from django.contrib.staticfiles.finders import get_finder
+        get_finder.cache_clear()

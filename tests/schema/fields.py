@@ -1,9 +1,8 @@
 from django.db.models.fields.related import (
+    RECURSIVE_RELATIONSHIP_CONSTANT, ManyToManyField, ManyToManyRel,
+    RelatedField, ReverseManyRelatedObjectsDescriptor,
     create_many_to_many_intermediary_model,
-    ManyToManyField, ManyToManyRel, RelatedField,
-    RECURSIVE_RELATIONSHIP_CONSTANT, ReverseManyRelatedObjectsDescriptor,
 )
-
 from django.utils.functional import curry
 
 
@@ -52,3 +51,7 @@ class CustomManyToManyField(RelatedField):
     _get_m2m_attr = ManyToManyField.__dict__['_get_m2m_attr']
     _get_m2m_reverse_attr = ManyToManyField.__dict__['_get_m2m_reverse_attr']
     _get_m2m_db_table = ManyToManyField.__dict__['_get_m2m_db_table']
+
+
+class InheritedManyToManyField(ManyToManyField):
+    pass

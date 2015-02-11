@@ -3,11 +3,13 @@ from __future__ import unicode_literals
 import re
 from tempfile import NamedTemporaryFile
 
-from django.db import connection
 from django.contrib.gis import gdal
 from django.contrib.gis.geos import HAS_GEOS
-from django.contrib.gis.tests.utils import no_oracle, oracle, postgis, spatialite
+from django.contrib.gis.tests.utils import (
+    no_oracle, oracle, postgis, spatialite,
+)
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, ignore_warnings, skipUnlessDBFeature
 from django.utils import six
 from django.utils.deprecation import RemovedInDjango20Warning
@@ -37,7 +39,7 @@ class GeoModelTest(TestCase):
 
     def test_proxy(self):
         "Testing Lazy-Geometry support (using the GeometryProxy)."
-        ## Testing on a Point
+        # Testing on a Point
         pnt = Point(0, 0)
         nullcity = City(name='NullCity', point=pnt)
         nullcity.save()
@@ -74,7 +76,7 @@ class GeoModelTest(TestCase):
         self.assertEqual(Point(23, 5), City.objects.get(name='NullCity').point)
         nullcity.delete()
 
-        ## Testing on a Polygon
+        # Testing on a Polygon
         shell = LinearRing((0, 0), (0, 100), (100, 100), (100, 0), (0, 0))
         inner = LinearRing((40, 40), (40, 60), (60, 60), (60, 40), (40, 40))
 

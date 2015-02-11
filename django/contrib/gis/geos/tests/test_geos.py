@@ -4,16 +4,15 @@ import ctypes
 import json
 import random
 import unittest
-from unittest import skipUnless
 from binascii import a2b_hex, b2a_hex
 from io import BytesIO
+from unittest import skipUnless
 
 from django.contrib.gis.gdal import HAS_GDAL
-
 from django.contrib.gis.geometry.test_data import TestDataMixin
-
-from django.utils.encoding import force_bytes
+from django.contrib.gis.shortcuts import numpy
 from django.utils import six
+from django.utils.encoding import force_bytes
 from django.utils.six.moves import range
 
 from .. import HAS_GEOS
@@ -22,7 +21,7 @@ if HAS_GEOS:
     from .. import (GEOSException, GEOSIndexError, GEOSGeometry,
         GeometryCollection, Point, MultiPoint, Polygon, MultiPolygon, LinearRing,
         LineString, MultiLineString, fromfile, fromstr, geos_version_info)
-    from ..base import gdal, numpy, GEOSBase
+    from ..base import gdal, GEOSBase
 
 
 @skipUnless(HAS_GEOS, "Geos is required.")
@@ -466,7 +465,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
     def test_memory_hijinks(self):
         "Testing Geometry __del__() on rings and polygons."
-        #### Memory issues with rings and polygons
+        # #### Memory issues with rings and poly
 
         # These tests are needed to ensure sanity with writable geometries.
 
@@ -661,7 +660,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
     def test_mutable_geometries(self):
         "Testing the mutability of Polygons and Geometry Collections."
-        ### Testing the mutability of Polygons ###
+        # ### Testing the mutability of Polygons ###
         for p in self.geometries.polygons:
             poly = fromstr(p.wkt)
 
@@ -681,7 +680,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             self.assertEqual(poly.exterior_ring, new_shell)
             self.assertEqual(poly[0], new_shell)
 
-        ### Testing the mutability of Geometry Collections
+        # ### Testing the mutability of Geometry Collections
         for tg in self.geometries.multipoints:
             mp = fromstr(tg.wkt)
             for i in range(len(mp)):
@@ -719,11 +718,11 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
         # Extreme (!!) __setitem__ -- no longer works, have to detect
         # in the first object that __setitem__ is called in the subsequent
         # objects -- maybe mpoly[0, 0, 0] = (3.14, 2.71)?
-        #mpoly[0][0][0] = (3.14, 2.71)
-        #self.assertEqual((3.14, 2.71), mpoly[0][0][0])
+        # mpoly[0][0][0] = (3.14, 2.71)
+        # self.assertEqual((3.14, 2.71), mpoly[0][0][0])
         # Doing it more slowly..
-        #self.assertEqual((3.14, 2.71), mpoly[0].shell[0])
-        #del mpoly
+        # self.assertEqual((3.14, 2.71), mpoly[0].shell[0])
+        # del mpoly
 
     def test_threed(self):
         "Testing three-dimensional geometries."

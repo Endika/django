@@ -1,7 +1,7 @@
 import copy
 import operator
-from functools import wraps
 import sys
+from functools import wraps
 
 from django.utils import six
 from django.utils.six.moves import copyreg
@@ -180,6 +180,8 @@ def allow_lazy(func, *resultclasses):
     immediately, otherwise a __proxy__ is returned that will evaluate the
     function when needed.
     """
+    lazy_func = lazy(func, *resultclasses)
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         for arg in list(args) + list(six.itervalues(kwargs)):
@@ -187,7 +189,7 @@ def allow_lazy(func, *resultclasses):
                 break
         else:
             return func(*args, **kwargs)
-        return lazy(func, *resultclasses)(*args, **kwargs)
+        return lazy_func(*args, **kwargs)
     return wrapper
 
 empty = object()

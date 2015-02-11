@@ -582,6 +582,7 @@ spam
 spammers
 spatialite
 Springmeyer
+SQL
 sqlflush
 sqlmigrate
 sqlsequencereset
@@ -689,7 +690,6 @@ uniterated
 unittest
 unittests
 unlocalize
-unmigrated
 unparseable
 unpickle
 unpickled

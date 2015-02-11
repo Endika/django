@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from argparse import ArgumentParser
 import logging
 import os
 import shutil
@@ -7,18 +6,20 @@ import subprocess
 import sys
 import tempfile
 import warnings
+from argparse import ArgumentParser
 
 import django
 from django import contrib
 from django.apps import apps
 from django.conf import settings
 from django.db import connection
-from django.test import TransactionTestCase, TestCase
+from django.test import TestCase, TransactionTestCase
 from django.test.utils import get_runner
-from django.utils.deprecation import RemovedInDjango20Warning, RemovedInDjango21Warning
-from django.utils._os import upath
 from django.utils import six
-
+from django.utils._os import upath
+from django.utils.deprecation import (
+    RemovedInDjango20Warning, RemovedInDjango21Warning,
+)
 
 warnings.simplefilter("error", RemovedInDjango20Warning)
 warnings.simplefilter("error", RemovedInDjango21Warning)
@@ -89,7 +90,8 @@ def get_installed():
 
 
 def setup(verbosity, test_labels):
-    print("Testing against Django installed in '%s'" % os.path.dirname(django.__file__))
+    if verbosity >= 1:
+        print("Testing against Django installed in '%s'" % os.path.dirname(django.__file__))
 
     # Force declaring available_apps in TransactionTestCase for faster tests.
     def no_available_apps(self):
@@ -133,8 +135,6 @@ def setup(verbosity, test_labels):
     settings.LANGUAGE_CODE = 'en'
     settings.SITE_ID = 1
     settings.MIDDLEWARE_CLASSES = ALWAYS_MIDDLEWARE_CLASSES
-    # Ensure the middleware classes are seen as overridden otherwise we get a compatibility warning.
-    settings._explicit_settings.add('MIDDLEWARE_CLASSES')
     settings.MIGRATION_MODULES = {
         # these 'tests.migrations' modules don't actually exist, but this lets
         # us skip creating migrations for the test models.

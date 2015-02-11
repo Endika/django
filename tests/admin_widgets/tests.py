@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from datetime import datetime, timedelta
 import gettext
-from importlib import import_module
 import os
+from datetime import datetime, timedelta
+from importlib import import_module
 from unittest import TestCase, skipIf
-
-try:
-    import pytz
-except ImportError:
-    pytz = None
 
 from django import forms
 from django.conf import settings
@@ -19,15 +14,18 @@ from django.contrib.admin import widgets
 from django.contrib.admin.tests import AdminSeleniumWebDriverTestCase
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.urlresolvers import reverse
 from django.db.models import CharField, DateField
-from django.test import TestCase as DjangoTestCase
-from django.test import override_settings
-from django.utils import six
-from django.utils import translation
+from django.test import TestCase as DjangoTestCase, override_settings
+from django.utils import six, translation
 
 from . import models
 from .widgetadmin import site as widget_admin_site
 
+try:
+    import pytz
+except ImportError:
+    pytz = None
 
 admin_static_prefix = lambda: {
     'ADMIN_STATIC_PREFIX': "%sadmin/" % settings.STATIC_URL,
@@ -177,7 +175,7 @@ class AdminFormfieldForDBFieldWithRequestTests(DjangoTestCase):
         Ensure the user can only see their own cars in the foreign key dropdown.
         """
         self.client.login(username="super", password="secret")
-        response = self.client.get("/admin_widgets/cartire/add/")
+        response = self.client.get(reverse('admin:admin_widgets_cartire_add'))
         self.assertNotContains(response, "BMW M3")
         self.assertContains(response, "Volkswagon Passat")
 
@@ -191,7 +189,7 @@ class AdminForeignKeyWidgetChangeList(DjangoTestCase):
         self.client.login(username="super", password="secret")
 
     def test_changelist_ForeignKey(self):
-        response = self.client.get('/admin_widgets/car/')
+        response = self.client.get(reverse('admin:admin_widgets_car_changelist'))
         self.assertContains(response, '/auth/user/add/')
 
 
@@ -212,7 +210,7 @@ class AdminForeignKeyRawIdWidget(DjangoTestCase):
         }
         # Try posting with a non-existent pk in a raw id field: this
         # should result in an error message, not a server exception.
-        response = self.client.post('/admin_widgets/event/add/', post_data)
+        response = self.client.post(reverse('admin:admin_widgets_event_add'), post_data)
         self.assertContains(response,
             'Select a valid choice. That choice is not one of the available choices.')
 
@@ -220,7 +218,7 @@ class AdminForeignKeyRawIdWidget(DjangoTestCase):
 
         for test_str in ('Iñtërnâtiônàlizætiøn', "1234'", -1234):
             # This should result in an error message, not a server exception.
-            response = self.client.post('/admin_widgets/event/add/',
+            response = self.client.post(reverse('admin:admin_widgets_event_add'),
                 {"main_band": test_str})
 
             self.assertContains(response,
@@ -350,24 +348,53 @@ class AdminURLWidgetTest(DjangoTestCase):
         )
 
 
-class AdminFileWidgetTest(DjangoTestCase):
-    def test_render(self):
+@override_settings(
+    PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],
+    ROOT_URLCONF='admin_widgets.urls',
+)
+class AdminFileWidgetTests(DjangoTestCase):
+    fixtures = ['admin-widgets-users.xml']
+
+    def setUp(self):
         band = models.Band.objects.create(name='Linkin Park')
-        album = band.album_set.create(
+        self.album = band.album_set.create(
             name='Hybrid Theory', cover_art=r'albums\hybrid_theory.jpg'
         )
 
+    def test_render(self):
         w = widgets.AdminFileWidget()
         self.assertHTMLEqual(
-            w.render('test', album.cover_art),
-            '<p class="file-upload">Currently: <a href="%(STORAGE_URL)salbums/hybrid_theory.jpg">albums\hybrid_theory.jpg</a> <span class="clearable-file-input"><input type="checkbox" name="test-clear" id="test-clear_id" /> <label for="test-clear_id">Clear</label></span><br />Change: <input type="file" name="test" /></p>' % {
-                'STORAGE_URL': default_storage.url('')
+            w.render('test', self.album.cover_art),
+            '<p class="file-upload">Currently: <a href="%(STORAGE_URL)salbums/'
+            'hybrid_theory.jpg">albums\hybrid_theory.jpg</a> '
+            '<span class="clearable-file-input">'
+            '<input type="checkbox" name="test-clear" id="test-clear_id" /> '
+            '<label for="test-clear_id">Clear</label></span><br />'
+            'Change: <input type="file" name="test" /></p>' % {
+                'STORAGE_URL': default_storage.url(''),
             },
         )
-
         self.assertHTMLEqual(
             w.render('test', SimpleUploadedFile('test', b'content')),
             '<input type="file" name="test" />',
+        )
+
+    def test_readonly_fields(self):
+        """
+        File widgets should render as a link when they're marked "read only."
+        """
+        self.client.login(username="super", password="secret")
+        response = self.client.get(reverse('admin:admin_widgets_album_change', args=(self.album.id,)))
+        self.assertContains(
+            response,
+            '<p><a href="%(STORAGE_URL)salbums/hybrid_theory.jpg">'
+            'albums\hybrid_theory.jpg</a></p>' % {'STORAGE_URL': default_storage.url('')},
+            html=True,
+        )
+        self.assertNotContains(
+            response,
+            '<input type="file" name="cover_art" id="id_cover_art" />',
+            html=True,
         )
 
 
@@ -556,7 +583,7 @@ class DateTimePickerSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url='/')
         # Open a page that has a date and time picker widgets
         self.selenium.get('%s%s' % (self.live_server_url,
-            '/admin_widgets/member/add/'))
+            reverse('admin:admin_widgets_member_add')))
 
         # First, with the date picker widget ---------------------------------
         # Check that the date picker is hidden
@@ -596,7 +623,7 @@ class DateTimePickerSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url='/')
         # Open a page that has a date and time picker widgets
         self.selenium.get('%s%s' % (self.live_server_url,
-            '/admin_widgets/member/add/'))
+            reverse('admin:admin_widgets_member_add')))
 
         # fill in the birth date.
         self.selenium.find_element_by_id('id_birthdate_0').send_keys('2013-06-01')
@@ -620,7 +647,7 @@ class DateTimePickerSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url='/')
         # Open a page that has a date and time picker widgets
         self.selenium.get('%s%s' % (self.live_server_url,
-            '/admin_widgets/member/add/'))
+            reverse('admin:admin_widgets_member_add')))
 
         # fill in the birth date.
         self.selenium.find_element_by_id('id_birthdate_0').send_keys('2013-06-01')
@@ -646,7 +673,7 @@ class DateTimePickerSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url='/')
         # Open a page that has a date and time picker widgets
         self.selenium.get('%s%s' % (self.live_server_url,
-            '/admin_widgets/member/add/'))
+            reverse('admin:admin_widgets_member_add')))
 
         # Click the calendar icon
         self.selenium.find_element_by_id('calendarlink0').click()
@@ -692,7 +719,7 @@ class DateTimePickerSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
 
                 # Open a page that has a date picker widget
                 self.selenium.get('{}{}'.format(self.live_server_url,
-                    '/admin_widgets/member/{}/'.format(member.pk)))
+                    reverse('admin:admin_widgets_member_change', args=(member.pk,))))
 
                 # Click on the calendar icon
                 self.selenium.find_element_by_id('calendarlink0').click()
@@ -746,7 +773,7 @@ class DateTimePickerShortcutsSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase
         now = datetime.now()
 
         self.selenium.get('%s%s' % (self.live_server_url,
-            '/admin_widgets/member/add/'))
+            reverse('admin:admin_widgets_member_add')))
 
         self.selenium.find_element_by_id('id_name').send_keys('test')
 
@@ -923,8 +950,8 @@ class HorizontalVerticalFilterSeleniumFirefoxTests(AdminSeleniumWebDriverTestCas
         self.school.save()
 
         self.admin_login(username='super', password='secret', login_url='/')
-        self.selenium.get(
-            '%s%s' % (self.live_server_url, '/admin_widgets/school/%s/' % self.school.id))
+        self.selenium.get('%s%s' % (
+            self.live_server_url, reverse('admin:admin_widgets_school_change', args=(self.school.id,))))
 
         self.wait_page_loaded()
         self.execute_basic_operations('vertical', 'students')
@@ -952,7 +979,7 @@ class HorizontalVerticalFilterSeleniumFirefoxTests(AdminSeleniumWebDriverTestCas
 
         self.admin_login(username='super', password='secret', login_url='/')
         self.selenium.get(
-            '%s%s' % (self.live_server_url, '/admin_widgets/school/%s/' % self.school.id))
+            '%s%s' % (self.live_server_url, reverse('admin:admin_widgets_school_change', args=(self.school.id,))))
 
         for field_name in ['students', 'alumni']:
             from_box = '#id_%s_from' % field_name
@@ -1053,7 +1080,7 @@ class AdminRawIdWidgetSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
     def test_ForeignKey(self):
         self.admin_login(username='super', password='secret', login_url='/')
         self.selenium.get(
-            '%s%s' % (self.live_server_url, '/admin_widgets/event/add/'))
+            '%s%s' % (self.live_server_url, reverse('admin:admin_widgets_event_add')))
         main_window = self.selenium.current_window_handle
 
         # No value has been selected yet
@@ -1088,7 +1115,7 @@ class AdminRawIdWidgetSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
     def test_many_to_many(self):
         self.admin_login(username='super', password='secret', login_url='/')
         self.selenium.get(
-            '%s%s' % (self.live_server_url, '/admin_widgets/event/add/'))
+            '%s%s' % (self.live_server_url, reverse('admin:admin_widgets_event_add')))
         main_window = self.selenium.current_window_handle
 
         # No value has been selected yet
@@ -1140,7 +1167,7 @@ class RelatedFieldWidgetSeleniumFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url='/')
         self.selenium.get('%s%s' % (
             self.live_server_url,
-            '/admin_widgets/profile/add/'))
+            reverse('admin:admin_widgets_profile_add')))
 
         main_window = self.selenium.current_window_handle
         # Click the Add User button to add new

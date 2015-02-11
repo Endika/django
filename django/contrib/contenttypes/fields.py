@@ -2,16 +2,15 @@ from __future__ import unicode_literals
 
 from collections import defaultdict
 
+from django.contrib.contenttypes.models import ContentType
 from django.core import checks
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
-from django.db import connection
-from django.db import models, router, transaction, DEFAULT_DB_ALIAS
-from django.db.models import signals, DO_NOTHING
+from django.db import DEFAULT_DB_ALIAS, connection, models, router, transaction
+from django.db.models import DO_NOTHING, signals
 from django.db.models.base import ModelBase
 from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.db.models.query_utils import PathInfo
-from django.contrib.contenttypes.models import ContentType
-from django.utils.encoding import smart_text, python_2_unicode_compatible
+from django.utils.encoding import python_2_unicode_compatible, smart_text
 
 
 @python_2_unicode_compatible
@@ -436,16 +435,8 @@ class ReverseGenericRelatedObjectsDescriptor(object):
         return manager
 
     def __set__(self, instance, value):
-        # Force evaluation of `value` in case it's a queryset whose
-        # value could be affected by `manager.clear()`. Refs #19816.
-        value = tuple(value)
-
         manager = self.__get__(instance)
-        db = router.db_for_write(manager.model, instance=manager.instance)
-        with transaction.atomic(using=db, savepoint=False):
-            manager.clear()
-            for obj in value:
-                manager.add(obj)
+        manager.set(value)
 
 
 def create_generic_related_manager(superclass):
@@ -560,6 +551,31 @@ def create_generic_related_manager(superclass):
                     for obj in queryset:
                         obj.delete()
         _clear.alters_data = True
+
+        def set(self, objs, **kwargs):
+            # Force evaluation of `objs` in case it's a queryset whose value
+            # could be affected by `manager.clear()`. Refs #19816.
+            objs = tuple(objs)
+
+            clear = kwargs.pop('clear', False)
+
+            db = router.db_for_write(self.model, instance=self.instance)
+            with transaction.atomic(using=db, savepoint=False):
+                if clear:
+                    self.clear()
+                    self.add(*objs)
+                else:
+                    old_objs = set(self.using(db).all())
+                    new_objs = []
+                    for obj in objs:
+                        if obj in old_objs:
+                            old_objs.remove(obj)
+                        else:
+                            new_objs.append(obj)
+
+                    self.remove(*old_objs)
+                    self.add(*new_objs)
+        set.alters_data = True
 
         def create(self, **kwargs):
             kwargs[self.content_type_field_name] = self.content_type
