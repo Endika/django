@@ -296,7 +296,7 @@ def _get_non_gfk_field(opts, name):
     "not found" by get_field(). This could likely be cleaned up.
     """
     field = opts.get_field(name)
-    if field.is_relation and field.one_to_many and not field.related_model:
+    if field.is_relation and field.many_to_one and not field.related_model:
         raise FieldDoesNotExist()
     return field
 
@@ -316,7 +316,7 @@ def label_for_field(name, model, model_admin=None, return_attr=False):
             label = field.verbose_name
         except AttributeError:
             # field is likely a ForeignObjectRel
-            label = field.opts.verbose_name
+            label = field.related_model._meta.verbose_name
     except FieldDoesNotExist:
         if name == "__unicode__":
             label = force_text(model._meta.verbose_name)
@@ -388,7 +388,7 @@ def display_for_field(value, field):
         return formats.number_format(value, field.decimal_places)
     elif isinstance(field, models.FloatField):
         return formats.number_format(value)
-    elif isinstance(field, models.FileField):
+    elif isinstance(field, models.FileField) and value:
         return mark_safe('<a href="%s">%s</a>' % (
             conditional_escape(value.url),
             conditional_escape(value),

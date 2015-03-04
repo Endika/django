@@ -593,7 +593,11 @@ class BaseDatabaseSchemaEditor(object):
                 ))
         # Nullability change?
         if old_field.null != new_field.null:
-            if new_field.null:
+            if (self.connection.features.interprets_empty_strings_as_nulls and
+                    new_field.get_internal_type() in ("CharField", "TextField")):
+                # The field is nullable in the database anyway, leave it alone
+                pass
+            elif new_field.null:
                 null_actions.append((
                     self.sql_alter_column_null % {
                         "column": self.quote_name(new_field.column),
@@ -794,7 +798,7 @@ class BaseDatabaseSchemaEditor(object):
             )
         # Else generate the name for the index using a different algorithm
         table_name = model._meta.db_table.replace('"', '').replace('.', '_')
-        index_unique_name = '_%x' % abs(hash((table_name, ','.join(column_names))))
+        index_unique_name = '_%s' % self._digest(table_name, *column_names)
         max_length = self.connection.ops.max_name_length() or 200
         # If the index name is too long, truncate it
         index_name = ('%s_%s%s%s' % (

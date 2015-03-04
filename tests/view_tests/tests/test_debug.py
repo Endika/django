@@ -7,9 +7,8 @@ import importlib
 import inspect
 import os
 import re
-import shutil
 import sys
-from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
+import tempfile
 from unittest import skipIf
 
 from django.core import mail
@@ -44,8 +43,7 @@ class CallableSettingWrapperTests(TestCase):
         self.assertEqual(actual, "repr from the wrapped callable")
 
 
-@override_settings(DEBUG=True, TEMPLATE_DEBUG=True,
-                   ROOT_URLCONF="view_tests.urls")
+@override_settings(DEBUG=True, ROOT_URLCONF="view_tests.urls")
 class DebugViewTests(TestCase):
 
     def test_files(self):
@@ -143,8 +141,8 @@ class DebugViewTests(TestCase):
     def test_template_loader_postmortem(self):
         """Tests for not existing file"""
         template_name = "notfound.html"
-        with NamedTemporaryFile(prefix=template_name) as tempfile:
-            tempdir = os.path.dirname(tempfile.name)
+        with tempfile.NamedTemporaryFile(prefix=template_name) as tmpfile:
+            tempdir = os.path.dirname(tmpfile.name)
             template_path = os.path.join(tempdir, template_name)
             with override_settings(TEMPLATES=[{
                 'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -152,36 +150,6 @@ class DebugViewTests(TestCase):
             }]):
                 response = self.client.get(reverse('raises_template_does_not_exist', kwargs={"path": template_name}))
             self.assertContains(response, "%s (File does not exist)" % template_path, status_code=500, count=1)
-
-    @skipIf(sys.platform == "win32", "Python on Windows doesn't have working os.chmod() and os.access().")
-    def test_template_loader_postmortem_notreadable(self):
-        """Tests for not readable file"""
-        with NamedTemporaryFile() as tempfile:
-            template_name = tempfile.name
-            tempdir = os.path.dirname(tempfile.name)
-            template_path = os.path.join(tempdir, template_name)
-            os.chmod(template_path, 0o0222)
-            with override_settings(TEMPLATES=[{
-                'BACKEND': 'django.template.backends.django.DjangoTemplates',
-                'DIRS': [tempdir],
-            }]):
-                response = self.client.get(reverse('raises_template_does_not_exist', kwargs={"path": template_name}))
-            self.assertContains(response, "%s (File is not readable)" % template_path, status_code=500, count=1)
-
-    def test_template_loader_postmortem_notafile(self):
-        """Tests for not being a file"""
-        try:
-            template_path = mkdtemp()
-            template_name = os.path.basename(template_path)
-            tempdir = os.path.dirname(template_path)
-            with override_settings(TEMPLATES=[{
-                'BACKEND': 'django.template.backends.django.DjangoTemplates',
-                'DIRS': [tempdir],
-            }]):
-                response = self.client.get(reverse('raises_template_does_not_exist', kwargs={"path": template_name}))
-            self.assertContains(response, "%s (Not a file)" % template_path, status_code=500, count=1)
-        finally:
-            shutil.rmtree(template_path)
 
     def test_no_template_source_loaders(self):
         """
@@ -296,7 +264,7 @@ class ExceptionReporterTests(TestCase):
         reporter = ExceptionReporter(None, None, None, None)
 
         for newline in ['\n', '\r\n', '\r']:
-            fd, filename = mkstemp(text=False)
+            fd, filename = tempfile.mkstemp(text=False)
             os.write(fd, force_bytes(newline.join(LINES) + newline))
             os.close(fd)
 

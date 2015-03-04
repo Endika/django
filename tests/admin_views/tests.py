@@ -137,6 +137,15 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
         response = self.client.get(reverse('admin:admin_views_section_change', args=('abc',)))
         self.assertEqual(response.status_code, 404)
 
+    def test_basic_edit_GET_old_url_redirect(self):
+        """
+        The change URL changed in Django 1.9, but the old one still redirects.
+        """
+        response = self.client.get(
+            reverse('admin:admin_views_section_change', args=(1,)).replace('change/', '')
+        )
+        self.assertRedirects(response, reverse('admin:admin_views_section_change', args=(1,)))
+
     def test_basic_inheritance_GET_string_PK(self):
         """
         Ensure GET on the change_view works on inherited models (returns an
@@ -1551,6 +1560,11 @@ class AdminViewPermissionsTest(TestCase):
 
             self.client.get(reverse('admin:logout'))
 
+    def test_history_view_bad_url(self):
+        self.client.post(reverse('admin:login'), self.changeuser_login)
+        response = self.client.get(reverse('admin:admin_views_article_history', args=('foo',)))
+        self.assertEqual(response.status_code, 404)
+
     def test_conditionally_show_add_section_link(self):
         """
         The foreign key widget should only show the "add related" button if the
@@ -2017,14 +2031,19 @@ class AdminViewStringPrimaryKeyTest(TestCase):
         self.assertContains(response, should_contain)
 
     def test_url_conflicts_with_add(self):
-        "A model with a primary key that ends with add should be visible"
-        add_model = ModelWithStringPrimaryKey(pk="i have something to add")
+        "A model with a primary key that ends with add or is `add` should be visible"
+        add_model = ModelWithStringPrimaryKey.objects.create(pk="i have something to add")
         add_model.save()
         response = self.client.get(
             reverse('admin:admin_views_modelwithstringprimarykey_change', args=(quote(add_model.pk),))
         )
         should_contain = """<h1>Change model with string primary key</h1>"""
         self.assertContains(response, should_contain)
+
+        add_model2 = ModelWithStringPrimaryKey.objects.create(pk="add")
+        add_url = reverse('admin:admin_views_modelwithstringprimarykey_add')
+        change_url = reverse('admin:admin_views_modelwithstringprimarykey_change', args=(quote(add_model2.pk),))
+        self.assertNotEqual(add_url, change_url)
 
     def test_url_conflicts_with_delete(self):
         "A model with a primary key that ends with delete should be visible"
@@ -2105,6 +2124,15 @@ class SecureViewTests(TestCase):
         response = self.client.get(secure_url, follow=True)
         self.assertTemplateUsed(response, 'admin/login.html')
         self.assertEqual(response.context[REDIRECT_FIELD_NAME], secure_url)
+
+    def test_staff_member_required_decorator_works_with_argument(self):
+        """
+        Ensure that staff_member_required decorator works with an argument
+        (redirect_field_name).
+        """
+        secure_url = '/test_admin/admin/secure-view2/'
+        response = self.client.get(secure_url)
+        self.assertRedirects(response, '%s?myfield=%s' % (reverse('admin:login'), secure_url))
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],
@@ -3296,8 +3324,7 @@ class AdminInlineFileUploadTest(TestCase):
         # Set up test Picture and Gallery.
         # These must be set up here instead of in fixtures in order to allow Picture
         # to use a NamedTemporaryFile.
-        tdir = tempfile.gettempdir()
-        file1 = tempfile.NamedTemporaryFile(suffix=".file1", dir=tdir)
+        file1 = tempfile.NamedTemporaryFile(suffix=".file1")
         file1.write(b'a' * (2 ** 21))
         filename = file1.name
         file1.close()

@@ -239,7 +239,8 @@ class ModelBase(type):
             else:
                 # .. and abstract ones.
                 for field in parent_fields:
-                    new_class.add_to_class(field.name, copy.deepcopy(field))
+                    new_field = copy.deepcopy(field)
+                    new_class.add_to_class(field.name, new_field)
 
                 # Pass any non-abstract parent classes onto child.
                 new_class._meta.parents.update(base._meta.parents)
@@ -595,7 +596,7 @@ class Model(six.with_metaclass(ModelBase)):
             if field.rel and field.get_cache_name() in self.__dict__:
                 rel_instance = getattr(self, field.get_cache_name())
                 local_val = getattr(db_instance, field.attname)
-                related_val = getattr(rel_instance, field.related_field.attname)
+                related_val = None if rel_instance is None else getattr(rel_instance, field.related_field.attname)
                 if local_val != related_val:
                     del self.__dict__[field.get_cache_name()]
         self._state.db = db_instance._state.db
@@ -1549,7 +1550,7 @@ class Model(six.with_metaclass(ModelBase)):
         # Find the minimum max allowed length among all specified db_aliases.
         for db in settings.DATABASES.keys():
             # skip databases where the model won't be created
-            if not router.allow_migrate(db, cls):
+            if not router.allow_migrate_model(db, cls):
                 continue
             connection = connections[db]
             max_name_length = connection.ops.max_name_length()

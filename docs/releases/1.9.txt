@@ -35,6 +35,14 @@ Minor features
 
 * Admin views now have ``model_admin`` or ``admin_site`` attributes.
 
+* The URL of the admin change view has been changed (was at
+  ``/admin/<app>/<model>/<pk>/`` by default and is now at
+  ``/admin/<app>/<model>/<pk>/change/``). This should not affect your
+  application unless you have hardcoded admin URLs. In that case, replace those
+  links by :ref:`reversing admin URLs <admin-reverse-urls>` instead. Note that
+  the old URL still redirects to the new one for backwards compatibility, but
+  it may be removed in a future version.
+
 :mod:`django.contrib.auth`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -106,7 +114,9 @@ File Uploads
 Forms
 ^^^^^
 
-* ...
+* :class:`~django.forms.ModelForm` accepts the new ``Meta`` option
+  ``field_classes`` to customize the type of the fields. See
+  :ref:`modelforms-overriding-default-fields` for details.
 
 Generic Views
 ^^^^^^^^^^^^^
@@ -213,6 +223,19 @@ the keyword argument ``clear=True``.
 ``ModelForm``, and therefore ``ModelAdmin``, internally rely on direct
 assignment for many-to-many relations and as a consequence now use the new
 behavior.
+
+Filesystem-based template loaders catch more specific exceptions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When using the :class:`filesystem.Loader <django.template.loaders.filesystem.Loader>`
+or :class:`app_directories.Loader <django.template.loaders.app_directories.Loader>`
+template loaders, earlier versions of Django raised a
+:exc:`~django.template.TemplateDoesNotExist` error if a template source existed
+but was unreadable. This could happen under many circumstances, such as if
+Django didn't have permissions to open the file, or if the template source was
+a directory. Now, Django only silences the exception if the template source
+does not exist. All other situations result in the original ``IOError`` being
+raised.
 
 Miscellaneous
 ~~~~~~~~~~~~~

@@ -272,6 +272,14 @@ class SmallPKData(models.Model):
 #    data = models.TimeField(primary_key=True)
 
 
+class UUIDData(models.Model):
+    data = models.UUIDField(primary_key=True)
+
+
+class FKToUUID(models.Model):
+    data = models.ForeignKey(UUIDData)
+
+
 class ComplexModel(models.Model):
     field1 = models.CharField(max_length=10)
     field2 = models.CharField(max_length=10)

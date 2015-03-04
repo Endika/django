@@ -36,7 +36,6 @@ from django.forms.models import (
 from django.forms.widgets import CheckboxSelectMultiple, SelectMultiple
 from django.http import Http404, HttpResponseRedirect
 from django.http.response import HttpResponseBase
-from django.shortcuts import get_object_or_404
 from django.template.response import SimpleTemplateResponse, TemplateResponse
 from django.utils import six
 from django.utils.decorators import method_decorator
@@ -47,6 +46,7 @@ from django.utils.safestring import mark_safe
 from django.utils.text import capfirst, get_text_list
 from django.utils.translation import string_concat, ugettext as _, ungettext
 from django.views.decorators.csrf import csrf_protect
+from django.views.generic import RedirectView
 
 IS_POPUP_VAR = '_popup'
 TO_FIELD_VAR = '_to_field'
@@ -555,7 +555,11 @@ class ModelAdmin(BaseModelAdmin):
             url(r'^add/$', wrap(self.add_view), name='%s_%s_add' % info),
             url(r'^(.+)/history/$', wrap(self.history_view), name='%s_%s_history' % info),
             url(r'^(.+)/delete/$', wrap(self.delete_view), name='%s_%s_delete' % info),
-            url(r'^(.+)/$', wrap(self.change_view), name='%s_%s_change' % info),
+            url(r'^(.+)/change/$', wrap(self.change_view), name='%s_%s_change' % info),
+            # For backwards compatibility (was the change url before 1.9)
+            url(r'^(.+)/$', wrap(RedirectView.as_view(
+                pattern_name='%s:%s_%s_change' % ((self.admin_site.name,) + info)
+            ))),
         ]
         return urlpatterns
 
@@ -1627,7 +1631,7 @@ class ModelAdmin(BaseModelAdmin):
             object_name=object_name,
             object=obj,
             deleted_objects=deleted_objects,
-            model_count=dict(model_count),
+            model_count=dict(model_count).items(),
             perms_lacking=perms_needed,
             protected=protected,
             opts=opts,
@@ -1646,7 +1650,12 @@ class ModelAdmin(BaseModelAdmin):
         from django.contrib.admin.models import LogEntry
         # First check if the user can see this history.
         model = self.model
-        obj = get_object_or_404(self.get_queryset(request), pk=unquote(object_id))
+        obj = self.get_object(request, unquote(object_id))
+        if obj is None:
+            raise Http404(_('%(name)s object with primary key %(key)r does not exist.') % {
+                'name': force_text(model._meta.verbose_name),
+                'key': escape(object_id),
+            })
 
         if not self.has_change_permission(request, obj):
             raise PermissionDenied

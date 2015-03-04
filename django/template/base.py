@@ -204,19 +204,15 @@ class Template(object):
 
     def render(self, context):
         "Display stage -- can be called many times"
-        # Set engine attribute here to avoid changing the signature of either
-        # Context.__init__ or Node.render. The engine is set only on the first
-        # call to render. Further calls e.g. for includes don't override it.
-        toplevel_render = context.engine is None
-        if toplevel_render:
-            context.engine = self.engine
         context.render_context.push()
         try:
-            return self._render(context)
+            if context.template is None:
+                with context.bind_template(self):
+                    return self._render(context)
+            else:
+                return self._render(context)
         finally:
             context.render_context.pop()
-            if toplevel_render:
-                context.engine = None
 
 
 class Token(object):
@@ -435,122 +431,6 @@ class Parser(object):
             raise TemplateSyntaxError("Invalid filter: '%s'" % filter_name)
 
 
-class TokenParser(object):
-    """
-    Subclass this and implement the top() method to parse a template line.
-    When instantiating the parser, pass in the line from the Django template
-    parser.
-
-    The parser's "tagname" instance-variable stores the name of the tag that
-    the filter was called with.
-    """
-    def __init__(self, subject):
-        self.subject = subject
-        self.pointer = 0
-        self.backout = []
-        self.tagname = self.tag()
-
-    def top(self):
-        """
-        Overload this method to do the actual parsing and return the result.
-        """
-        raise NotImplementedError('subclasses of Tokenparser must provide a top() method')
-
-    def more(self):
-        """
-        Returns True if there is more stuff in the tag.
-        """
-        return self.pointer < len(self.subject)
-
-    def back(self):
-        """
-        Undoes the last microparser. Use this for lookahead and backtracking.
-        """
-        if not len(self.backout):
-            raise TemplateSyntaxError("back called without some previous "
-                                      "parsing")
-        self.pointer = self.backout.pop()
-
-    def tag(self):
-        """
-        A microparser that just returns the next tag from the line.
-        """
-        subject = self.subject
-        i = self.pointer
-        if i >= len(subject):
-            raise TemplateSyntaxError("expected another tag, found "
-                                      "end of string: %s" % subject)
-        p = i
-        while i < len(subject) and subject[i] not in (' ', '\t'):
-            i += 1
-        s = subject[p:i]
-        while i < len(subject) and subject[i] in (' ', '\t'):
-            i += 1
-        self.backout.append(self.pointer)
-        self.pointer = i
-        return s
-
-    def value(self):
-        """
-        A microparser that parses for a value: some string constant or
-        variable name.
-        """
-        subject = self.subject
-        i = self.pointer
-
-        def next_space_index(subject, i):
-            """
-            Increment pointer until a real space (i.e. a space not within
-            quotes) is encountered
-            """
-            while i < len(subject) and subject[i] not in (' ', '\t'):
-                if subject[i] in ('"', "'"):
-                    c = subject[i]
-                    i += 1
-                    while i < len(subject) and subject[i] != c:
-                        i += 1
-                    if i >= len(subject):
-                        raise TemplateSyntaxError("Searching for value. "
-                            "Unexpected end of string in column %d: %s" %
-                            (i, subject))
-                i += 1
-            return i
-
-        if i >= len(subject):
-            raise TemplateSyntaxError("Searching for value. Expected another "
-                                      "value but found end of string: %s" %
-                                      subject)
-        if subject[i] in ('"', "'"):
-            p = i
-            i += 1
-            while i < len(subject) and subject[i] != subject[p]:
-                i += 1
-            if i >= len(subject):
-                raise TemplateSyntaxError("Searching for value. Unexpected "
-                                          "end of string in column %d: %s" %
-                                          (i, subject))
-            i += 1
-
-            # Continue parsing until next "real" space,
-            # so that filters are also included
-            i = next_space_index(subject, i)
-
-            res = subject[p:i]
-            while i < len(subject) and subject[i] in (' ', '\t'):
-                i += 1
-            self.backout.append(self.pointer)
-            self.pointer = i
-            return res
-        else:
-            p = i
-            i = next_space_index(subject, i)
-            s = subject[p:i]
-            while i < len(subject) and subject[i] in (' ', '\t'):
-                i += 1
-            self.backout.append(self.pointer)
-            self.pointer = i
-            return s
-
 # This only matches constant *strings* (things in quotes or marked for
 # translation). Numbers are treated as variables for implementation reasons
 # (so that they retain their type when passed to filters).
@@ -655,7 +535,7 @@ class FilterExpression(object):
                 if ignore_failures:
                     obj = None
                 else:
-                    string_if_invalid = context.engine.string_if_invalid
+                    string_if_invalid = context.template.engine.string_if_invalid
                     if string_if_invalid:
                         if '%s' in string_if_invalid:
                             return string_if_invalid % self.var
@@ -847,7 +727,7 @@ class Variable(object):
                     if getattr(current, 'do_not_call_in_templates', False):
                         pass
                     elif getattr(current, 'alters_data', False):
-                        current = context.engine.string_if_invalid
+                        current = context.template.engine.string_if_invalid
                     else:
                         try:  # method call (assuming no args required)
                             current = current()
@@ -855,12 +735,12 @@ class Variable(object):
                             try:
                                 getcallargs(current)
                             except TypeError:  # arguments *were* required
-                                current = context.engine.string_if_invalid  # invalid method call
+                                current = context.template.engine.string_if_invalid  # invalid method call
                             else:
                                 raise
         except Exception as e:
             if getattr(e, 'silent_variable_failure', False):
-                current = context.engine.string_if_invalid
+                current = context.template.engine.string_if_invalid
             else:
                 raise
 
@@ -1257,9 +1137,9 @@ class Library(object):
                         elif isinstance(getattr(file_name, 'template', None), Template):
                             t = file_name.template
                         elif not isinstance(file_name, six.string_types) and is_iterable(file_name):
-                            t = context.engine.select_template(file_name)
+                            t = context.template.engine.select_template(file_name)
                         else:
-                            t = context.engine.get_template(file_name)
+                            t = context.template.engine.get_template(file_name)
                         self.nodelist = t.nodelist
                     new_context = context.new(_dict)
                     # Copy across the CSRF token, if present, because
