@@ -274,6 +274,17 @@ should define the desired ``output_field``. For example, adding an
 ``IntegerField()`` and a ``FloatField()`` together should probably have
 ``output_field=FloatField()`` defined.
 
+.. note::
+
+    When you need to define the ``output_field`` for ``F`` expression
+    arithmetic between different types, it's necessary to surround the
+    expression in another expression::
+
+        from django.db.models import DateTimeField, Expression, F
+
+        Race.objects.annotate(finish=Expression(
+            F('start') + F('duration'), output_field=DateTimeField()))
+
 .. versionchanged:: 1.8
 
     ``output_field`` is a new parameter.
@@ -354,13 +365,13 @@ Expression API
 
 Query expressions implement the :ref:`query expression API <query-expression>`,
 but also expose a number of extra methods and attributes listed below. All
-query expressions must inherit from ``ExpressionNode()`` or a relevant
+query expressions must inherit from ``Expression()`` or a relevant
 subclass.
 
 When a query expression wraps another expression, it is responsible for
 calling the appropriate methods on the wrapped expression.
 
-.. class:: ExpressionNode
+.. class:: Expression
 
     .. attribute:: contains_aggregate
 
@@ -474,9 +485,9 @@ We'll start by defining the template to be used for SQL generation and
 an ``__init__()`` method to set some attributes::
 
   import copy
-  from django.db.models import ExpressionNode
+  from django.db.models import Expression
 
-  class Coalesce(ExpressionNode):
+  class Coalesce(Expression):
       template = 'COALESCE( %(expressions)s )'
 
       def __init__(self, expressions, output_field, **extra):

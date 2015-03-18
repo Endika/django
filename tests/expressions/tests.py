@@ -617,8 +617,8 @@ class ExpressionOperatorTests(TestCase):
 class FTimeDeltaTests(TestCase):
 
     def setUp(self):
-        sday = datetime.date(2010, 6, 25)
-        stime = datetime.datetime(2010, 6, 25, 12, 15, 30, 747000)
+        self.sday = sday = datetime.date(2010, 6, 25)
+        self.stime = stime = datetime.datetime(2010, 6, 25, 12, 15, 30, 747000)
         midnight = datetime.time(0)
 
         delta0 = datetime.timedelta(0)
@@ -821,6 +821,15 @@ class FTimeDeltaTests(TestCase):
             Experiment.objects.filter(estimated_time__lt=F('end') - F('start'))]
         self.assertEqual(over_estimate, ['e4'])
 
+    def test_duration_with_datetime(self):
+        # Exclude e1 which has very high precision so we can test this on all
+        # backends regardless of whether or not it supports
+        # microsecond_precision.
+        over_estimate = Experiment.objects.exclude(name='e1').filter(
+            completed__gt=self.stime + F('estimated_time'),
+        ).order_by('name')
+        self.assertQuerysetEqual(over_estimate, ['e3', 'e4'], lambda e: e.name)
+
 
 class ValueTests(TestCase):
     def test_update_TimeField_using_Value(self):
@@ -845,7 +854,7 @@ class ReprTests(TestCase):
         self.assertEqual(repr(Date('published', 'exact')), "Date(published, exact)")
         self.assertEqual(repr(DateTime('published', 'exact', utc)), "DateTime(published, exact, %s)" % utc)
         self.assertEqual(repr(F('published')), "F(published)")
-        self.assertEqual(repr(F('cost') + F('tax')), "<Expression: F(cost) + F(tax)>")
+        self.assertEqual(repr(F('cost') + F('tax')), "<CombinedExpression: F(cost) + F(tax)>")
         self.assertEqual(repr(Func('published', function='TO_CHAR')), "Func(F(published), function=TO_CHAR)")
         self.assertEqual(repr(OrderBy(Value(1))), 'OrderBy(Value(1), descending=False)')
         self.assertEqual(repr(Random()), "Random()")

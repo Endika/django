@@ -54,7 +54,10 @@ Minor features
 :mod:`django.contrib.gis`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* ...
+* The GDAL interface now supports instantiating file-based and in-memory
+  :ref:`GDALRaster objects <raster-data-source-objects>` from raw data.
+  Setters for raster properties such as projection or pixel values have
+  been added.
 
 :mod:`django.contrib.messages`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -94,7 +97,8 @@ Minor features
 Cache
 ^^^^^
 
-* ...
+* ``django.core.cache.backends.base.BaseCache`` now has a ``get_or_set()``
+  method.
 
 Email
 ^^^^^
@@ -117,6 +121,10 @@ Forms
 * :class:`~django.forms.ModelForm` accepts the new ``Meta`` option
   ``field_classes`` to customize the type of the fields. See
   :ref:`modelforms-overriding-default-fields` for details.
+
+* You can now specify the order in which form fields are rendered with the
+  :attr:`~django.forms.Form.field_order` attribute, the ``field_order``
+  constructor argument , or the :meth:`~django.forms.Form.order_fields` method.
 
 Generic Views
 ^^^^^^^^^^^^^
@@ -143,6 +151,10 @@ Models
   managers created by ``ForeignKey``, ``GenericForeignKey``, and
   ``ManyToManyField``.
 
+* Added the ``keep_parents`` parameter to :meth:`Model.delete()
+  <django.db.models.Model.delete>` to allow deleting only a child's data in a
+  model that uses multi-table inheritance.
+
 CSRF
 ^^^^
 
@@ -161,6 +173,9 @@ Templates
   helper can now store results in a template variable by using the ``as``
   argument.
 
+* Added a :meth:`Context.setdefault() <django.template.Context.setdefault>`
+  method.
+
 Requests and Responses
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -170,6 +185,8 @@ Requests and Responses
   <django.http.HttpResponse.status_code>`. Modifying the value of
   ``status_code`` outside of the constructor will also modify the value of
   ``reason_phrase``.
+
+* The debug view now shows details of chained exceptions on Python 3.
 
 Tests
 ^^^^^
