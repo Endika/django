@@ -436,6 +436,7 @@ Login
 logout
 Logout
 Loïc
+lookaround
 lookup
 Lookup
 lookups
@@ -682,6 +683,7 @@ screenshots
 sdist
 semimajor
 semiminor
+sendtestemail
 serializability
 serializable
 serializer

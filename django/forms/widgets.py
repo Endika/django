@@ -18,7 +18,7 @@ from django.utils.encoding import (
     force_str, force_text, python_2_unicode_compatible,
 )
 from django.utils.formats import get_format
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape, format_html, html_safe
 from django.utils.safestring import mark_safe
 from django.utils.six.moves import range
 from django.utils.six.moves.urllib.parse import urljoin
@@ -37,6 +37,7 @@ __all__ = (
 MEDIA_TYPES = ('css', 'js')
 
 
+@html_safe
 @python_2_unicode_compatible
 class Media(object):
     def __init__(self, media=None, **kwargs):
@@ -156,6 +157,7 @@ class MediaDefiningClass(type):
         return new_class
 
 
+@html_safe
 @python_2_unicode_compatible
 class SubWidget(object):
     """
@@ -599,6 +601,7 @@ class SelectMultiple(Select):
         return data.get(name, None)
 
 
+@html_safe
 @python_2_unicode_compatible
 class ChoiceInput(SubWidget):
     """
@@ -664,6 +667,7 @@ class CheckboxChoiceInput(ChoiceInput):
         return self.choice_value in self.value
 
 
+@html_safe
 @python_2_unicode_compatible
 class ChoiceFieldRenderer(object):
     """

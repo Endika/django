@@ -3,11 +3,13 @@ from __future__ import unicode_literals
 import datetime
 
 from django.contrib import admin
+from django.contrib.admin.models import LogEntry
 from django.contrib.admin.options import IncorrectLookupParameters
 from django.contrib.admin.templatetags.admin_list import pagination
 from django.contrib.admin.tests import AdminSeleniumWebDriverTestCase
 from django.contrib.admin.views.main import ALL_VAR, SEARCH_VAR, ChangeList
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 from django.template import Context, Template
 from django.test import TestCase, override_settings
@@ -50,9 +52,10 @@ class ChangeListTests(TestCase):
         """
         m = ChildAdmin(Child, admin.site)
         request = self.factory.get('/child/')
+        list_select_related = m.get_list_select_related(request)
         cl = ChangeList(request, Child, m.list_display, m.list_display_links,
                         m.list_filter, m.date_hierarchy, m.search_fields,
-                        m.list_select_related, m.list_per_page,
+                        list_select_related, m.list_per_page,
                         m.list_max_show_all, m.list_editable, m)
         self.assertEqual(cl.queryset.query.select_related, {
             'parent': {'name': {}}
@@ -61,9 +64,10 @@ class ChangeListTests(TestCase):
     def test_select_related_as_tuple(self):
         ia = InvitationAdmin(Invitation, admin.site)
         request = self.factory.get('/invitation/')
+        list_select_related = ia.get_list_select_related(request)
         cl = ChangeList(request, Child, ia.list_display, ia.list_display_links,
                         ia.list_filter, ia.date_hierarchy, ia.search_fields,
-                        ia.list_select_related, ia.list_per_page,
+                        list_select_related, ia.list_per_page,
                         ia.list_max_show_all, ia.list_editable, ia)
         self.assertEqual(cl.queryset.query.select_related, {'player': {}})
 
@@ -71,11 +75,28 @@ class ChangeListTests(TestCase):
         ia = InvitationAdmin(Invitation, admin.site)
         ia.list_select_related = ()
         request = self.factory.get('/invitation/')
+        list_select_related = ia.get_list_select_related(request)
         cl = ChangeList(request, Child, ia.list_display, ia.list_display_links,
                         ia.list_filter, ia.date_hierarchy, ia.search_fields,
-                        ia.list_select_related, ia.list_per_page,
+                        list_select_related, ia.list_per_page,
                         ia.list_max_show_all, ia.list_editable, ia)
         self.assertEqual(cl.queryset.query.select_related, False)
+
+    def test_get_select_related_custom_method(self):
+        class GetListSelectRelatedAdmin(admin.ModelAdmin):
+            list_display = ('band', 'player')
+
+            def get_list_select_related(self, request):
+                return ('band', 'player')
+
+        ia = GetListSelectRelatedAdmin(Invitation, admin.site)
+        request = self.factory.get('/invitation/')
+        list_select_related = ia.get_list_select_related(request)
+        cl = ChangeList(request, Child, ia.list_display, ia.list_display_links,
+                        ia.list_filter, ia.date_hierarchy, ia.search_fields,
+                        list_select_related, ia.list_per_page,
+                        ia.list_max_show_all, ia.list_editable, ia)
+        self.assertEqual(cl.queryset.query.select_related, {'player': {}, 'band': {}})
 
     def test_result_list_empty_changelist_value(self):
         """
@@ -665,6 +686,24 @@ class AdminLogNodeTestCase(TestCase):
         # Rendering should be u'' since this templatetag just logs,
         # it doesn't render any string.
         self.assertEqual(template.render(context), '')
+
+    def test_get_admin_log_templatetag_no_user(self):
+        """
+        The {% get_admin_log %} tag should work without specifying a user.
+        """
+        user = User(username='jondoe', password='secret', email='super@example.com')
+        user.save()
+        ct = ContentType.objects.get_for_model(User)
+        LogEntry.objects.log_action(user.pk, ct.pk, user.pk, repr(user), 1)
+
+        t = Template(
+            '{% load log %}'
+            '{% get_admin_log 100 as admin_log %}'
+            '{% for entry in admin_log %}'
+            '{{ entry|safe }}'
+            '{% endfor %}'
+        )
+        self.assertEqual(t.render(Context({})), 'Added "<User: jondoe>".')
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],

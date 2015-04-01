@@ -69,12 +69,16 @@ class Migration(object):
     def __hash__(self):
         return hash("%s.%s" % (self.app_label, self.name))
 
-    def mutate_state(self, project_state):
+    def mutate_state(self, project_state, preserve=True):
         """
         Takes a ProjectState and returns a new one with the migration's
-        operations applied to it.
+        operations applied to it. Preserves the original object state by
+        default and will return a mutated state from a copy.
         """
-        new_state = project_state.clone()
+        new_state = project_state
+        if preserve:
+            new_state = project_state.clone()
+
         for operation in self.operations:
             operation.state_forwards(self.app_label, new_state)
         return new_state
@@ -91,13 +95,16 @@ class Migration(object):
         for operation in self.operations:
             # If this operation cannot be represented as SQL, place a comment
             # there instead
-            if collect_sql and not operation.reduces_to_sql:
+            if collect_sql:
                 schema_editor.collected_sql.append("--")
-                schema_editor.collected_sql.append("-- MIGRATION NOW PERFORMS OPERATION THAT CANNOT BE "
-                                                   "WRITTEN AS SQL:")
+                if not operation.reduces_to_sql:
+                    schema_editor.collected_sql.append(
+                        "-- MIGRATION NOW PERFORMS OPERATION THAT CANNOT BE WRITTEN AS SQL:"
+                    )
                 schema_editor.collected_sql.append("-- %s" % operation.describe())
                 schema_editor.collected_sql.append("--")
-                continue
+                if not operation.reduces_to_sql:
+                    continue
             # Save the state before the operation has run
             old_state = project_state.clone()
             operation.state_forwards(self.app_label, project_state)
@@ -142,12 +149,14 @@ class Migration(object):
         # Phase 2
         for operation, to_state, from_state in to_run:
             if collect_sql:
+                schema_editor.collected_sql.append("--")
                 if not operation.reduces_to_sql:
-                    schema_editor.collected_sql.append("--")
-                    schema_editor.collected_sql.append("-- MIGRATION NOW PERFORMS OPERATION THAT CANNOT BE "
-                                                       "WRITTEN AS SQL:")
-                    schema_editor.collected_sql.append("-- %s" % operation.describe())
-                    schema_editor.collected_sql.append("--")
+                    schema_editor.collected_sql.append(
+                        "-- MIGRATION NOW PERFORMS OPERATION THAT CANNOT BE WRITTEN AS SQL:"
+                    )
+                schema_editor.collected_sql.append("-- %s" % operation.describe())
+                schema_editor.collected_sql.append("--")
+                if not operation.reduces_to_sql:
                     continue
             if not schema_editor.connection.features.can_rollback_ddl and operation.atomic:
                 # We're forcing a transaction on a non-transactional-DDL backend

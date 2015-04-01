@@ -175,8 +175,10 @@ def strip_tags(value):
     # is redundant, but helps to reduce number of executions of _strip_once.
     while '<' in value and '>' in value:
         new_value = _strip_once(value)
-        if new_value == value:
-            # _strip_once was not able to detect more tags
+        if len(new_value) >= len(value):
+            # _strip_once was not able to detect more tags or length increased
+            # due to http://bugs.python.org/issue20288
+            # (affects Python 2 < 2.7.7 and Python 3 < 3.3.5)
             break
         value = new_value
     return value
@@ -358,3 +360,34 @@ def avoid_wrapping(value):
     spaces where there previously were normal spaces.
     """
     return value.replace(" ", "\xa0")
+
+
+def html_safe(klass):
+    """
+    A decorator that defines the __html__ method. This helps non-Django
+    templates to detect classes whose __str__ methods return SafeText.
+    """
+    if '__html__' in klass.__dict__:
+        raise ValueError(
+            "can't apply @html_safe to %s because it defines "
+            "__html__()." % klass.__name__
+        )
+    if six.PY2:
+        if '__unicode__' not in klass.__dict__:
+            raise ValueError(
+                "can't apply @html_safe to %s because it doesn't "
+                "define __unicode__()." % klass.__name__
+            )
+        klass_unicode = klass.__unicode__
+        klass.__unicode__ = lambda self: mark_safe(klass_unicode(self))
+        klass.__html__ = lambda self: unicode(self)
+    else:
+        if '__str__' not in klass.__dict__:
+            raise ValueError(
+                "can't apply @html_safe to %s because it doesn't "
+                "define __str__()." % klass.__name__
+            )
+        klass_str = klass.__str__
+        klass.__str__ = lambda self: mark_safe(klass_str(self))
+        klass.__html__ = lambda self: str(self)
+    return klass

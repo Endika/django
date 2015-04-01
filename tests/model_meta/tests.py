@@ -226,7 +226,7 @@ class RelationTreeTests(TestCase):
         # Testing non hidden related objects
         self.assertEqual(
             sorted([field.related_query_name() for field in Relation._meta._relation_tree
-                   if not field.rel.field.rel.is_hidden()]),
+                   if not field.remote_field.field.remote_field.is_hidden()]),
             sorted([
                 'fk_abstract_rel', 'fk_base_rel', 'fk_concrete_rel', 'fo_abstract_rel',
                 'fo_base_rel', 'fo_concrete_rel', 'm2m_abstract_rel',
@@ -237,7 +237,7 @@ class RelationTreeTests(TestCase):
         self.assertEqual(
             sorted([field.related_query_name() for field in BasePerson._meta._relation_tree]),
             sorted([
-                '+', '+', 'BasePerson_following_abstract+', 'BasePerson_following_abstract+',
+                '+', '_basepeople_hidden_+', 'BasePerson_following_abstract+', 'BasePerson_following_abstract+',
                 'BasePerson_following_base+', 'BasePerson_following_base+', 'BasePerson_friends_abstract+',
                 'BasePerson_friends_abstract+', 'BasePerson_friends_base+', 'BasePerson_friends_base+',
                 'BasePerson_m2m_abstract+', 'BasePerson_m2m_base+', 'Relating_basepeople+',

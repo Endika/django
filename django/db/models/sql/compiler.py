@@ -136,10 +136,7 @@ class SQLCompiler(object):
         # If the DB can group by primary key, then group by the primary key of
         # query's main model. Note that for PostgreSQL the GROUP BY clause must
         # include the primary key of every table, but for MySQL it is enough to
-        # have the main table's primary key. Currently only the MySQL form is
-        # implemented.
-        # MySQLism: however, columns in HAVING clause must be added to the
-        # GROUP BY.
+        # have the main table's primary key.
         if self.connection.features.allows_group_by_pk:
             # The logic here is: if the main model's primary key is in the
             # query, then set new_expressions to that field. If that happens,
@@ -150,7 +147,18 @@ class SQLCompiler(object):
                         getattr(expr.output_field, 'model') == self.query.model):
                     pk = expr
             if pk:
+                # MySQLism: Columns in HAVING clause must be added to the GROUP BY.
                 expressions = [pk] + [expr for expr in expressions if expr in having]
+        elif self.connection.features.allows_group_by_selected_pks:
+            # Filter out all expressions associated with a table's primary key
+            # present in the grouped columns. This is done by identifying all
+            # tables that have their primary key included in the grouped
+            # columns and removing non-primary key columns referring to them.
+            pks = {expr for expr in expressions if hasattr(expr, 'target') and expr.target.primary_key}
+            aliases = {expr.alias for expr in pks}
+            expressions = [
+                expr for expr in expressions if expr in pks or getattr(expr, 'alias', None) not in aliases
+            ]
         return expressions
 
     def get_select(self):
@@ -547,7 +555,7 @@ class SQLCompiler(object):
         # If we get to this point and the field is a relation to another model,
         # append the default ordering for that model unless the attribute name
         # of the field is specified.
-        if field.rel and path and opts.ordering and name != field.attname:
+        if field.is_relation and path and opts.ordering and name != field.attname:
             # Firstly, avoid infinite loops.
             if not already_seen:
                 already_seen = set()
@@ -676,7 +684,7 @@ class SQLCompiler(object):
                                           only_load.get(field_model)):
                 continue
             klass_info = {
-                'model': f.rel.to,
+                'model': f.remote_field.model,
                 'field': f,
                 'reverse': False,
                 'from_parent': False,
@@ -686,13 +694,13 @@ class SQLCompiler(object):
             _, _, _, joins, _ = self.query.setup_joins(
                 [f.name], opts, root_alias)
             alias = joins[-1]
-            columns = self.get_default_columns(start_alias=alias, opts=f.rel.to._meta)
+            columns = self.get_default_columns(start_alias=alias, opts=f.remote_field.model._meta)
             for col in columns:
                 select_fields.append(len(select))
                 select.append((col, None))
             klass_info['select_fields'] = select_fields
             next_klass_infos = self.get_related_selections(
-                select, f.rel.to._meta, alias, cur_depth + 1, next, restricted)
+                select, f.remote_field.model._meta, alias, cur_depth + 1, next, restricted)
             get_related_klass_infos(klass_info, next_klass_infos)
 
         if restricted:
@@ -1003,7 +1011,7 @@ class SQLUpdateCompiler(SQLCompiler):
                 if val.contains_aggregate:
                     raise FieldError("Aggregate functions are not allowed in this query")
             elif hasattr(val, 'prepare_database_save'):
-                if field.rel:
+                if field.remote_field:
                     val = val.prepare_database_save(field)
                 else:
                     raise TypeError("Database is trying to update a relational field "

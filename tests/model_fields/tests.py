@@ -5,6 +5,7 @@ import unittest
 from decimal import Decimal
 
 from django import forms, test
+from django.apps import apps
 from django.core import checks, validators
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, models, transaction
@@ -21,12 +22,11 @@ from django.utils import six
 from django.utils.functional import lazy
 
 from .models import (
-    AbstractForeignFieldsModel, Bar, BigD, BigIntegerModel, BigS, BooleanModel,
-    DataModel, DateTimeModel, Document, FksToBooleans, FkToChar, FloatModel,
-    Foo, GenericIPAddress, IntegerModel, NullBooleanModel,
-    PositiveIntegerModel, PositiveSmallIntegerModel, Post, PrimaryKeyCharModel,
-    RenamedField, SmallIntegerModel, VerboseNameField, Whiz, WhizIter,
-    WhizIterEmpty,
+    Bar, BigD, BigIntegerModel, BigS, BooleanModel, DataModel, DateTimeModel,
+    Document, FksToBooleans, FkToChar, FloatModel, Foo, GenericIPAddress,
+    IntegerModel, NullBooleanModel, PositiveIntegerModel,
+    PositiveSmallIntegerModel, Post, PrimaryKeyCharModel, RenamedField,
+    SmallIntegerModel, VerboseNameField, Whiz, WhizIter, WhizIterEmpty,
 )
 
 
@@ -199,40 +199,49 @@ class ForeignKeyTests(test.TestCase):
         self.assertEqual(warnings, expected_warnings)
 
     def test_related_name_converted_to_text(self):
-        rel_name = Bar._meta.get_field('a').rel.related_name
+        rel_name = Bar._meta.get_field('a').remote_field.related_name
         self.assertIsInstance(rel_name, six.text_type)
 
-    def test_abstract_model_pending_lookups(self):
+    def test_abstract_model_pending_operations(self):
         """
         Foreign key fields declared on abstract models should not add lazy relations to
         resolve relationship declared as string. refs #24215
         """
-        opts = AbstractForeignFieldsModel._meta
-        to_key = ('missing', 'FK')
-        fk_lookup = (AbstractForeignFieldsModel, opts.get_field('fk'))
-        self.assertFalse(
-            any(lookup[0:2] == fk_lookup for lookup in opts.apps._pending_lookups.get(to_key, [])),
-            'Pending lookup added for the abstract model foreign key `to` parameter'
+        pending_ops_before = list(apps._pending_operations.items())
+
+        class AbstractForeignKeyModel(models.Model):
+            fk = models.ForeignKey('missing.FK')
+
+            class Meta:
+                abstract = True
+
+        self.assertIs(AbstractForeignKeyModel._meta.apps, apps)
+        self.assertEqual(
+            pending_ops_before,
+            list(apps._pending_operations.items()),
+            "Pending lookup added for a foreign key on an abstract model"
         )
 
 
 class ManyToManyFieldTests(test.TestCase):
-    def test_abstract_model_pending_lookups(self):
+    def test_abstract_model_pending_operations(self):
         """
         Many-to-many fields declared on abstract models should not add lazy relations to
         resolve relationship declared as string. refs #24215
         """
-        opts = AbstractForeignFieldsModel._meta
-        to_key = ('missing', 'M2M')
-        fk_lookup = (AbstractForeignFieldsModel, opts.get_field('m2m'))
-        self.assertFalse(
-            any(lookup[0:2] == fk_lookup for lookup in opts.apps._pending_lookups.get(to_key, [])),
-            'Pending lookup added for the abstract model many-to-many `to` parameter.'
-        )
-        through_key = ('missing', 'Through')
-        self.assertFalse(
-            any(lookup[0:2] == fk_lookup for lookup in opts.apps._pending_lookups.get(through_key, [])),
-            'Pending lookup added for the abstract model many-to-many `through` parameter.'
+        pending_ops_before = list(apps._pending_operations.items())
+
+        class AbstractManyToManyModel(models.Model):
+            fk = models.ForeignKey('missing.FK')
+
+            class Meta:
+                abstract = True
+
+        self.assertIs(AbstractManyToManyModel._meta.apps, apps)
+        self.assertEqual(
+            pending_ops_before,
+            list(apps._pending_operations.items()),
+            "Pending lookup added for a many-to-many field on an abstract model"
         )
 
 
@@ -444,13 +453,6 @@ class ChoicesTests(test.TestCase):
         self.assertEqual(WhizIterEmpty(c="b").c, "b")      # Invalid value
         self.assertEqual(WhizIterEmpty(c=None).c, None)    # Blank value
         self.assertEqual(WhizIterEmpty(c='').c, '')        # Empty value
-
-    def test_charfield_get_choices_with_blank_iterator(self):
-        """
-        Check that get_choices works with an empty Iterator
-        """
-        f = models.CharField(choices=(x for x in []))
-        self.assertEqual(f.get_choices(include_blank=True), [('', '---------')])
 
 
 class SlugFieldTests(test.TestCase):

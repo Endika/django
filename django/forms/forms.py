@@ -16,7 +16,7 @@ from django.utils import six
 from django.utils.encoding import (
     force_text, python_2_unicode_compatible, smart_text,
 )
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape, format_html, html_safe
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _
 
@@ -67,6 +67,7 @@ class DeclarativeFieldsMetaclass(MediaDefiningClass):
         return new_class
 
 
+@html_safe
 @python_2_unicode_compatible
 class BaseForm(object):
     # This is the main implementation of all the Form logic. Note that this
@@ -501,6 +502,7 @@ class Form(six.with_metaclass(DeclarativeFieldsMetaclass, BaseForm)):
     # BaseForm itself has no way of designating self.fields.
 
 
+@html_safe
 @python_2_unicode_compatible
 class BoundField(object):
     "A Field plus data"

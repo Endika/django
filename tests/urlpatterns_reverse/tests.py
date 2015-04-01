@@ -24,6 +24,7 @@ from django.shortcuts import redirect
 from django.test import (
     SimpleTestCase, TestCase, ignore_warnings, override_settings,
 )
+from django.test.utils import override_script_prefix
 from django.utils import six
 from django.utils.deprecation import RemovedInDjango20Warning
 
@@ -96,6 +97,12 @@ test_data = (
     ('people_backref', '/people/nate-nate/', [], {'name': 'nate'}),
     ('optional', '/optional/fred/', [], {'name': 'fred'}),
     ('optional', '/optional/fred/', ['fred'], {}),
+    ('named_optional', '/optional/1/', [1], {}),
+    ('named_optional', '/optional/1/', [], {'arg1': 1}),
+    ('named_optional', '/optional/1/2/', [1, 2], {}),
+    ('named_optional', '/optional/1/2/', [], {'arg1': 1, 'arg2': 2}),
+    ('named_optional_terminated', '/optional/1/2/', [1, 2], {}),
+    ('named_optional_terminated', '/optional/1/2/', [], {'arg1': 1, 'arg2': 2}),
     ('hardcoded', '/hardcoded/', [], {}),
     ('hardcoded2', '/hardcoded/doc.pdf', [], {}),
     ('people3', '/people/il/adrian/', [], {'state': 'il', 'name': 'adrian'}),
@@ -143,6 +150,17 @@ test_data = (
     ('part2', '/part2/', [], {}),
     ('part2', '/prefix/xx/part2/one/', [], {'value': 'one', 'prefix': 'xx'}),
     ('part2', '/prefix/xx/part2/', [], {'prefix': 'xx'}),
+
+    # Tests for nested groups. Nested capturing groups will only work if you
+    # *only* supply the correct outer group.
+    ('nested-noncapture', '/nested/noncapture/opt', [], {'p': 'opt'}),
+    ('nested-capture', '/nested/capture/opt/', ['opt/'], {}),
+    ('nested-capture', NoReverseMatch, [], {'p': 'opt'}),
+    ('nested-mixedcapture', '/nested/capture/mixed/opt', ['opt'], {}),
+    ('nested-mixedcapture', NoReverseMatch, [], {'p': 'opt'}),
+    ('nested-namedcapture', '/nested/capture/named/opt/', [], {'outer': 'opt/'}),
+    ('nested-namedcapture', NoReverseMatch, [], {'outer': 'opt/', 'inner': 'opt'}),
+    ('nested-namedcapture', NoReverseMatch, [], {'inner': 'opt'}),
 
     # Regression for #9038
     # These views are resolved by method name. Each method is deployed twice -
@@ -199,33 +217,38 @@ class URLPatternReverse(TestCase):
         # Reversing None should raise an error, not return the last un-named view.
         self.assertRaises(NoReverseMatch, reverse, None)
 
+    @override_script_prefix('/{{invalid}}/')
     def test_prefix_braces(self):
         self.assertEqual(
             '/%7B%7Binvalid%7D%7D/includes/non_path_include/',
-            reverse('non_path_include', prefix='/{{invalid}}/')
+            reverse('non_path_include')
         )
 
     def test_prefix_parenthesis(self):
         # Parentheses are allowed and should not cause errors or be escaped
-        self.assertEqual(
-            '/bogus)/includes/non_path_include/',
-            reverse('non_path_include', prefix='/bogus)/')
-        )
-        self.assertEqual(
-            '/(bogus)/includes/non_path_include/',
-            reverse('non_path_include', prefix='/(bogus)/')
-        )
+        with override_script_prefix('/bogus)/'):
+            self.assertEqual(
+                '/bogus)/includes/non_path_include/',
+                reverse('non_path_include')
+            )
+        with override_script_prefix('/(bogus)/'):
+            self.assertEqual(
+                '/(bogus)/includes/non_path_include/',
+                reverse('non_path_include')
+            )
 
+    @override_script_prefix('/bump%20map/')
     def test_prefix_format_char(self):
         self.assertEqual(
             '/bump%2520map/includes/non_path_include/',
-            reverse('non_path_include', prefix='/bump%20map/')
+            reverse('non_path_include')
         )
 
+    @override_script_prefix('/%7Eme/')
     def test_non_urlsafe_prefix_with_args(self):
         # Regression for #20022, adjusted for #24013 because ~ is an unreserved
         # character. Tests whether % is escaped.
-        self.assertEqual('/%257Eme/places/1/', reverse('places', args=[1], prefix='/%7Eme/'))
+        self.assertEqual('/%257Eme/places/1/', reverse('places', args=[1]))
 
     def test_patterns_reported(self):
         # Regression for #17076
@@ -240,9 +263,10 @@ class URLPatternReverse(TestCase):
             # exception
             self.fail("Expected a NoReverseMatch, but none occurred.")
 
+    @override_script_prefix('/script:name/')
     def test_script_name_escaping(self):
         self.assertEqual(
-            reverse('optional', args=['foo:bar'], prefix='/script:name/'),
+            reverse('optional', args=['foo:bar']),
             '/script:name/optional/foo:bar/'
         )
 
@@ -775,3 +799,50 @@ class IncludeTests(SimpleTestCase):
         msg = "Must specify a namespace if specifying app_name."
         with self.assertRaisesMessage(ValueError, msg):
             include('urls', app_name='bar')
+
+
+@override_settings(ROOT_URLCONF='urlpatterns_reverse.urls')
+class LookaheadTests(TestCase):
+    def test_valid_resolve(self):
+        test_urls = [
+            '/lookahead-/a-city/',
+            '/lookbehind-/a-city/',
+            '/lookahead+/a-city/',
+            '/lookbehind+/a-city/',
+        ]
+        for test_url in test_urls:
+            match = resolve(test_url)
+            self.assertEqual(match.kwargs, {'city': 'a-city'})
+
+    def test_invalid_resolve(self):
+        test_urls = [
+            '/lookahead-/not-a-city/',
+            '/lookbehind-/not-a-city/',
+            '/lookahead+/other-city/',
+            '/lookbehind+/other-city/',
+        ]
+        for test_url in test_urls:
+            with self.assertRaises(Resolver404):
+                resolve(test_url)
+
+    def test_valid_reverse(self):
+        url = reverse('lookahead-positive', kwargs={'city': 'a-city'})
+        self.assertEqual(url, '/lookahead+/a-city/')
+        url = reverse('lookahead-negative', kwargs={'city': 'a-city'})
+        self.assertEqual(url, '/lookahead-/a-city/')
+
+        url = reverse('lookbehind-positive', kwargs={'city': 'a-city'})
+        self.assertEqual(url, '/lookbehind+/a-city/')
+        url = reverse('lookbehind-negative', kwargs={'city': 'a-city'})
+        self.assertEqual(url, '/lookbehind-/a-city/')
+
+    def test_invalid_reverse(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse('lookahead-positive', kwargs={'city': 'other-city'})
+        with self.assertRaises(NoReverseMatch):
+            reverse('lookahead-negative', kwargs={'city': 'not-a-city'})
+
+        with self.assertRaises(NoReverseMatch):
+            reverse('lookbehind-positive', kwargs={'city': 'other-city'})
+        with self.assertRaises(NoReverseMatch):
+            reverse('lookbehind-negative', kwargs={'city': 'not-a-city'})

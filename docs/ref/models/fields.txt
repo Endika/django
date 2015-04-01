@@ -12,10 +12,13 @@ This document contains all the API references of :class:`Field` including the
 
 .. seealso::
 
-    If the built-in fields don't do the trick, you can try :doc:`localflavor
-    </topics/localflavor>`, which contains assorted pieces of code
-    that are useful for particular countries or cultures. Also, you can easily
-    :doc:`write your own custom model fields </howto/custom-model-fields>`.
+    If the built-in fields don't do the trick, you can try `django-localflavor
+    <https://github.com/django/django-localflavor>`_ (`documentation
+    <https://django-localflavor.readthedocs.org/>`_), which contains assorted
+    pieces of code that are useful for particular countries and cultures.
+
+    Also, you can easily :doc:`write your own custom model fields
+    </howto/custom-model-fields>`.
 
 .. note::
 
@@ -502,6 +505,15 @@ Any combination of these options will result in an error.
     ``True`` will cause the field to have ``editable=False`` and ``blank=True``
     set.
 
+.. note::
+    The ``auto_now`` and ``auto_now_add`` options will always use the date in
+    the :ref:`default timezone <default-current-time-zone>` at the moment of
+    creation or update. If you need something different, you may want to
+    consider simply using your own callable default or overriding ``save()``
+    instead of using ``auto_now`` or ``auto_now_add``; or using a
+    ``DateTimeField`` instead of a ``DateField`` and deciding how to handle the
+    conversion from datetime to date at display time.
+
 ``DateTimeField``
 -----------------
 
@@ -595,19 +607,32 @@ Has two optional arguments:
 
 .. attribute:: FileField.upload_to
 
-    A local filesystem path that will be appended to your :setting:`MEDIA_ROOT`
-    setting to determine the value of the
-    :attr:`~django.db.models.fields.files.FieldFile.url` attribute.
+    This attribute provides a way of setting the upload directory and file name,
+    and can be set in two ways. In both cases, the value is passed to the
+    :meth:`Storage.save() <django.core.files.storage.Storage.save>` method.
 
-    This path may contain :func:`~time.strftime` formatting, which will be
-    replaced by the date/time of the file upload (so that uploaded files don't
-    fill up the given directory).
+    If you specify a string value, it may contain :func:`~time.strftime`
+    formatting, which will be replaced by the date/time of the file upload (so
+    that uploaded files don't fill up the given directory). For example::
 
-    This may also be a callable, such as a function, which will be called to
-    obtain the upload path, including the filename. This callable must be able
-    to accept two arguments, and return a Unix-style path (with forward slashes)
-    to be passed along to the storage system. The two arguments that will be
-    passed are:
+        class MyModel(models.Model):
+            # file will be uploaded to MEDIA_ROOT/uploads
+            upload = models.FileField(upload_to='uploads/')
+            # or...
+            # file will be saved to MEDIA_ROOT/uploads/2015/01/30
+            upload = models.FileField(upload_to='uploads/%Y/%m/%d/')
+
+    If you are using the default
+    :class:`~django.core.files.storage.FileSystemStorage`, the string value
+    will be appended to your :setting:`MEDIA_ROOT` path to form the location on
+    the local filesystem where uploaded files will be stored. If you are using
+    a different storage, check that storage's documentation to see how it
+    handles ``upload_to``.
+
+    ``upload_to`` may also be a callable, such as a function. This will be
+    called to obtain the upload path, including the filename. This callable must
+    accept two arguments and return a Unix-style path (with forward slashes)
+    to be passed along to the storage system. The two arguments are:
 
     ======================  ===============================================
     Argument                Description
@@ -626,6 +651,15 @@ Has two optional arguments:
                             file. This may or may not be taken into account
                             when determining the final destination path.
     ======================  ===============================================
+
+    For example::
+
+        def user_directory_path(instance, filename):
+            # file will be uploaded to MEDIA_ROOT/user_<id>/<filename>
+            return 'user_{0}/{1}'.format(instance.user.id, filename)
+
+        class MyModel(models.Model):
+            upload = models.FileField(upload_to=user_directory_path)
 
 .. attribute:: FileField.storage
 
@@ -1291,6 +1325,30 @@ The possible values for :attr:`~ForeignKey.on_delete` are found in
 
     If in doubt, leave it to its default of ``True``.
 
+.. attribute:: ForeignKey.allow_unsaved_instance_assignment
+
+    .. versionadded:: 1.8
+
+        This flag was added for backwards compatibility as older versions of
+        Django always allowed assigning unsaved model instances.
+
+    Django prevents unsaved model instances from being assigned to a
+    ``ForeignKey`` field to prevent accidental data loss (unsaved foreign keys
+    are silently ignored when saving a model instance).
+
+    If you require allowing the assignment of unsaved instances and aren't
+    concerned about the data loss possibility (e.g. you never save the objects
+    to the database), you can disable this check by creating a subclass of the
+    field class and setting its ``allow_unsaved_instance_assignment`` attribute
+    to ``True``. For example::
+
+        class UnsavedForeignKey(models.ForeignKey):
+            # A ForeignKey which can point to an unsaved object
+            allow_unsaved_instance_assignment = True
+
+        class Book(models.Model):
+            author = UnsavedForeignKey(Author)
+
 .. _ref-manytomany:
 
 ``ManyToManyField``
@@ -1388,7 +1446,7 @@ that control how the relationship functions.
     * ``<other_model>_id``: the ``id`` of the model that the
       ``ManyToManyField`` points to.
 
-    If the ``ManyToManyField`` points from and to the same model, the following 
+    If the ``ManyToManyField`` points from and to the same model, the following
     fields are generated:
 
     * ``id``: the primary key of the relation.
@@ -1482,6 +1540,12 @@ that control how the relationship functions.
     if it is a profile model designed specifically for your custom user model.
 
     If in doubt, leave it to its default of ``True``.
+
+.. attribute:: ManyToManyField.allow_unsaved_instance_assignment
+
+    .. versionadded:: 1.8
+
+    Works analogously to :attr:`ForeignKey.allow_unsaved_instance_assignment`.
 
 :class:`ManyToManyField` does not support :attr:`~Field.validators`.
 

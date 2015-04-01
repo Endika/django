@@ -8,7 +8,7 @@ import unittest
 
 from django.contrib.admin import ModelAdmin
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
-from django.contrib.admin.models import DELETION, LogEntry
+from django.contrib.admin.models import ADDITION, DELETION, LogEntry
 from django.contrib.admin.options import TO_FIELD_VAR
 from django.contrib.admin.templatetags.admin_static import static
 from django.contrib.admin.templatetags.admin_urls import add_preserved_filters
@@ -22,15 +22,14 @@ from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core import mail
 from django.core.checks import Error
 from django.core.files import temp as tempfile
-from django.core.urlresolvers import (
-    NoReverseMatch, get_script_prefix, resolve, reverse, set_script_prefix,
-)
+from django.core.urlresolvers import NoReverseMatch, resolve, reverse
 from django.forms.utils import ErrorList
+from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.test import (
     TestCase, modify_settings, override_settings, skipUnlessDBFeature,
 )
-from django.test.utils import patch_logger
+from django.test.utils import override_script_prefix, patch_logger
 from django.utils import formats, six, translation
 from django.utils._os import upath
 from django.utils.cache import get_max_age
@@ -1544,6 +1543,17 @@ class AdminViewPermissionsTest(TestCase):
         self.assertEqual(mail.outbox[0].subject, 'Greetings from a created object')
         self.client.get(reverse('admin:logout'))
 
+        # Check that the addition was logged correctly
+        addition_log = LogEntry.objects.all()[0]
+        new_article = Article.objects.last()
+        article_ct = ContentType.objects.get_for_model(Article)
+        self.assertEqual(addition_log.user_id, self.u2.pk)
+        self.assertEqual(addition_log.content_type_id, article_ct.pk)
+        self.assertEqual(addition_log.object_id, str(new_article.pk))
+        self.assertEqual(addition_log.object_repr, "Døm ikke")
+        self.assertEqual(addition_log.action_flag, ADDITION)
+        self.assertEqual(addition_log.change_message, "Added.")
+
         # Super can add too, but is redirected to the change list view
         self.client.get(self.index_url)
         self.client.post(login_url, self.super_login)
@@ -2310,6 +2320,12 @@ class AdminViewStringPrimaryKeyTest(TestCase):
 
         logentry.content_type.model = "non-existent"
         self.assertEqual(logentry.get_admin_url(), None)
+
+    def test_logentry_get_edited_object(self):
+        "LogEntry.get_edited_object returns the edited object of a given LogEntry object"
+        logentry = LogEntry.objects.get(content_type__model__iexact="modelwithstringprimarykey")
+        edited_obj = logentry.get_edited_object()
+        self.assertEqual(logentry.object_id, str(edited_obj.pk))
 
     def test_deleteconfirmation_link(self):
         "The link from the delete confirmation page referring back to the changeform of the object should be quoted"
@@ -3474,6 +3490,30 @@ action)</option>
             {'name': 'Troy McClure', 'age': '55', IS_POPUP_VAR: '1'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.template_name, 'admin/popup_response.html')
+
+    def test_popup_template_escaping(self):
+        context = {
+            'new_value': 'new_value\\',
+            'obj': 'obj\\',
+            'value': 'value\\',
+        }
+        output = render_to_string('admin/popup_response.html', context)
+        self.assertIn(
+            'opener.dismissAddRelatedObjectPopup(window, "value\\u005C", "obj\\u005C");', output
+        )
+
+        context['action'] = 'change'
+        output = render_to_string('admin/popup_response.html', context)
+        self.assertIn(
+            'opener.dismissChangeRelatedObjectPopup(window, '
+            '"value\\u005C", "obj\\u005C", "new_value\\u005C");', output
+        )
+
+        context['action'] = 'delete'
+        output = render_to_string('admin/popup_response.html', context)
+        self.assertIn(
+            'opener.dismissDeleteRelatedObjectPopup(window, "value\\u005C");', output
+        )
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],
@@ -5822,16 +5862,12 @@ class AdminKeepChangeListFiltersTests(TestCase):
             add_preserved_filters(context, url),
         )
 
-        original_prefix = get_script_prefix()
-        try:
-            set_script_prefix('/prefix/')
+        with override_script_prefix('/prefix/'):
             url = reverse('admin:auth_user_changelist', current_app=self.admin_site.name)
             self.assertURLEqual(
                 self.get_changelist_url(),
                 add_preserved_filters(context, url),
             )
-        finally:
-            set_script_prefix(original_prefix)
 
 
 class NamespacedAdminKeepChangeListFiltersTests(AdminKeepChangeListFiltersTests):

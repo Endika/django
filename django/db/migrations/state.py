@@ -8,10 +8,9 @@ from django.apps.registry import Apps, apps as global_apps
 from django.conf import settings
 from django.db import models
 from django.db.models.fields.proxy import OrderWrt
-from django.db.models.fields.related import (
-    RECURSIVE_RELATIONSHIP_CONSTANT, do_pending_lookups,
-)
+from django.db.models.fields.related import RECURSIVE_RELATIONSHIP_CONSTANT
 from django.db.models.options import DEFAULT_NAMES, normalize_together
+from django.db.models.utils import make_model_tuple
 from django.utils import six
 from django.utils.encoding import force_text, smart_text
 from django.utils.functional import cached_property
@@ -35,6 +34,12 @@ def get_related_models_recursive(model):
     """
     Returns all models that have a direct or indirect relationship
     to the given model.
+
+    Relationships are either defined by explicit relational fields, like
+    ForeignKey, ManyToManyField or OneToOneField, or by inheriting from another
+    model (a superclass is related to its subclasses, but not vice versa). Note,
+    however, that a model inheriting from a concrete model is also related to
+    its superclass through the implicit *_ptr OneToOneField on the subclass.
     """
     def _related_models(m):
         return [
@@ -94,9 +99,9 @@ class ProjectState(object):
             model_state = self.models[(app_label, model_name)]
             for name, field in model_state.fields:
                 if field.is_relation:
-                    if field.rel.to == RECURSIVE_RELATIONSHIP_CONSTANT:
+                    if field.remote_field.model == RECURSIVE_RELATIONSHIP_CONSTANT:
                         continue
-                    rel_app_label, rel_model_name = _get_app_label_and_model_name(field.rel.to, app_label)
+                    rel_app_label, rel_model_name = _get_app_label_and_model_name(field.remote_field.model, app_label)
                     related_models.add((rel_app_label, rel_model_name.lower()))
 
             # Unregister all related models
@@ -213,23 +218,14 @@ class StateApps(Apps):
 
         self.render_multiple(list(models.values()) + self.real_models)
 
-        # If there are some lookups left, see if we can first resolve them
-        # ourselves - sometimes fields are added after class_prepared is sent
-        for lookup_model, operations in self._pending_lookups.items():
-            try:
-                model = self.get_model(lookup_model[0], lookup_model[1])
-            except LookupError:
-                app_label = "%s.%s" % (lookup_model[0], lookup_model[1])
-                if app_label == settings.AUTH_USER_MODEL and ignore_swappable:
-                    continue
-                # Raise an error with a best-effort helpful message
-                # (only for the first issue). Error message should look like:
-                # "ValueError: Lookup failed for model referenced by
-                # field migrations.Book.author: migrations.Author"
-                msg = "Lookup failed for model referenced by field {field}: {model[0]}.{model[1]}"
-                raise ValueError(msg.format(field=operations[0][1], model=lookup_model))
-            else:
-                do_pending_lookups(model)
+        # There shouldn't be any operations pending at this point.
+        pending_models = set(self._pending_operations)
+        if ignore_swappable:
+            pending_models -= {make_model_tuple(settings.AUTH_USER_MODEL)}
+        if pending_models:
+            msg = "Unhandled pending operations for models: %s"
+            labels = (".".join(model_key) for model_key in self._pending_operations)
+            raise ValueError(msg % ", ".join(labels))
 
     def render_multiple(self, model_states):
         # We keep trying to render the models in a loop, ignoring invalid
@@ -277,6 +273,7 @@ class StateApps(Apps):
             self.app_configs[app_label] = AppConfigStub(app_label)
             self.app_configs[app_label].models = OrderedDict()
         self.app_configs[app_label].models[model._meta.model_name] = model
+        self.do_pending_operations(model)
         self.clear_cache()
 
     def unregister_model(self, app_label, model_name):
@@ -328,7 +325,7 @@ class ModelState(object):
         # Deconstruct the fields
         fields = []
         for field in model._meta.local_fields:
-            if getattr(field, "rel", None) and exclude_rels:
+            if getattr(field, "remote_field", None) and exclude_rels:
                 continue
             if isinstance(field, OrderWrt):
                 continue
