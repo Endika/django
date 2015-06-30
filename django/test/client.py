@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import json
 import mimetypes
 import os
 import re
@@ -414,7 +415,7 @@ class Client(RequestFactory):
         """
         if apps.is_installed('django.contrib.sessions'):
             engine = import_module(settings.SESSION_ENGINE)
-            cookie = self.cookies.get(settings.SESSION_COOKIE_NAME, None)
+            cookie = self.cookies.get(settings.SESSION_COOKIE_NAME)
             if cookie:
                 return engine.SessionStore(cookie.value)
             else:
@@ -472,6 +473,8 @@ class Client(RequestFactory):
             # Add any rendered template detail to the response.
             response.templates = data.get("templates", [])
             response.context = data.get("context")
+
+            response.json = curry(self._parse_json, response)
 
             # Attach the ResolverMatch instance to the response
             response.resolver_match = SimpleLazyObject(
@@ -640,6 +643,11 @@ class Client(RequestFactory):
             request.session = engine.SessionStore()
         logout(request)
         self.cookies = SimpleCookie()
+
+    def _parse_json(self, response, **extra):
+        if 'application/json' not in response.get('Content-Type'):
+            raise ValueError('Content-Type header is "{0}", not "application/json"'.format(response.get('Content-Type')))
+        return json.loads(response.content.decode(), **extra)
 
     def _handle_redirects(self, response, **extra):
         "Follows any redirects by requesting responses from the server using GET."
