@@ -25,6 +25,19 @@ Python 3.2 and 3.3, and added support for Python 3.5.
 What's new in Django 1.9
 ========================
 
+Performing actions after a transaction commit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The new :func:`~django.db.transaction.on_commit` hook allows performing actions
+after a database transaction is successfully committed. This is useful for
+tasks such as sending notification emails, creating queued tasks, or
+invalidating caches.
+
+This functionality from the `django-transaction-hooks`_ package has been
+integrated into Django.
+
+.. _django-transaction-hooks: https://pypi.python.org/pypi/django-transaction-hooks
+
 Password validation
 ~~~~~~~~~~~~~~~~~~~
 
@@ -337,6 +350,10 @@ Management Commands
 * The :djadmin:`startapp` command creates an ``apps.py`` file and adds
   ``default_app_config`` in ``__init__.py``.
 
+* When using the PostgreSQL backend, the :djadmin:`dbshell` command can connect
+  to the database using the password from your settings file (instead of
+  requiring it to be manually entered).
+
 Models
 ^^^^^^
 
@@ -527,6 +544,12 @@ Database backend API
   SQLite backend to add time lookups (hour, minute, second) to
   :class:`~django.db.models.TimeField`, and may be needed by third-party
   database backends.
+  
+* The ``DatabaseOperations.datetime_cast_sql()`` method (not to be confused
+  with ``DatabaseOperations.datetime_cast_date_sql()`` mentioned above)
+  has been removed. This method served to format dates on Oracle long
+  before 1.0, but hasn't been overridden by any core backend in years
+  and hasn't been called anywhere in Django's code or tests.
 
 Default settings that were tuples are now lists
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
