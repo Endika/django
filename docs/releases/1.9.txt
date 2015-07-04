@@ -172,6 +172,10 @@ Minor features
   :func:`~django.contrib.auth.decorators.permission_required()` accepts all
   kinds of iterables, not only list and tuples.
 
+* The new :class:`~django.contrib.auth.middleware.PersistentRemoteUserMiddleware`
+  makes it possible to use ``REMOTE_USER`` for setups where the header is only
+  populated on login pages instead of every request in the session.
+
 :mod:`django.contrib.gis`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -365,6 +369,9 @@ Management Commands
 Models
 ^^^^^^
 
+* :meth:`QuerySet.bulk_create() <django.db.models.query.QuerySet.bulk_create>`
+  now works on proxy models.
+
 * Database configuration gained a :setting:`TIME_ZONE <DATABASE-TIME_ZONE>`
   option for interacting with databases that store datetimes in local time and
   don't support time zones when :setting:`USE_TZ` is ``True``.
@@ -472,6 +479,9 @@ Requests and Responses
 * View error handlers now support
   :class:`~django.template.response.TemplateResponse`, commonly used with
   class-based views.
+
+* Exceptions raised by the ``render()`` method are now passed to the
+  ``process_exception()`` method of each middleware.
 
 * Request middleware can now set :attr:`HttpRequest.urlconf
   <django.http.HttpRequest.urlconf>` to ``None`` to revert any changes made
@@ -762,6 +772,19 @@ To fix your ``simple_tag``\s, it is best to apply the following practices:
 
 Tags that follow these rules will be correct and safe whether they are run on
 Django 1.9+ or earlier.
+
+``Paginator.page_range``
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+:attr:`Paginator.page_range <django.core.paginator.Paginator.page_range>` is
+now an iterator instead of a list.
+
+In versions of Django previous to 1.8, ``Paginator.page_range`` returned a
+``list`` in Python 2 and a ``range`` in Python 3. Django 1.8 consistently
+returned a list, but an iterator is more efficient.
+
+Existing code that depends on ``list`` specific features, such as indexing,
+can be ported by converting the iterator into a ``list`` using ``list()``.
 
 Miscellaneous
 ~~~~~~~~~~~~~
