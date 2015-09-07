@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import re
+
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser
+from django.core.validators import RegexValidator, validate_slug
 from django.db import connection, models
 from django.db.migrations.autodetector import MigrationAutodetector
 from django.db.migrations.graph import MigrationGraph
@@ -8,6 +12,7 @@ from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.questioner import MigrationQuestioner
 from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase, mock, override_settings
+from django.test.utils import isolate_lru_cache
 
 from .models import FoodManager, FoodQuerySet
 
@@ -183,17 +188,17 @@ class AutodetectorTests(TestCase):
     author_with_book = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("book", models.ForeignKey("otherapp.Book")),
+        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
     ])
     author_with_book_order_wrt = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("book", models.ForeignKey("otherapp.Book")),
+        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
     ], options={"order_with_respect_to": "book"})
     author_renamed_with_book = ModelState("testapp", "Writer", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("book", models.ForeignKey("otherapp.Book")),
+        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
     ])
     author_with_publisher_string = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
@@ -203,17 +208,17 @@ class AutodetectorTests(TestCase):
     author_with_publisher = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("publisher", models.ForeignKey("testapp.Publisher")),
+        ("publisher", models.ForeignKey("testapp.Publisher", models.CASCADE)),
     ])
     author_with_user = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("user", models.ForeignKey("auth.User")),
+        ("user", models.ForeignKey("auth.User", models.CASCADE)),
     ])
     author_with_custom_user = ModelState("testapp", "Author", [
         ("id", models.AutoField(primary_key=True)),
         ("name", models.CharField(max_length=200)),
-        ("user", models.ForeignKey("thirdapp.CustomUser")),
+        ("user", models.ForeignKey("thirdapp.CustomUser", models.CASCADE)),
     ])
     author_proxy = ModelState("testapp", "AuthorProxy", [], {"proxy": True}, ("testapp.author",))
     author_proxy_options = ModelState("testapp", "AuthorProxy", [], {
@@ -265,8 +270,8 @@ class AutodetectorTests(TestCase):
     ], {"db_table": "author_three"})
     contract = ModelState("testapp", "Contract", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
-        ("publisher", models.ForeignKey("testapp.Publisher")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
+        ("publisher", models.ForeignKey("testapp.Publisher", models.CASCADE)),
     ])
     publisher = ModelState("testapp", "Publisher", [
         ("id", models.AutoField(primary_key=True)),
@@ -274,17 +279,17 @@ class AutodetectorTests(TestCase):
     ])
     publisher_with_author = ModelState("testapp", "Publisher", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("name", models.CharField(max_length=100)),
     ])
     publisher_with_aardvark_author = ModelState("testapp", "Publisher", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Aardvark")),
+        ("author", models.ForeignKey("testapp.Aardvark", models.CASCADE)),
         ("name", models.CharField(max_length=100)),
     ])
     publisher_with_book = ModelState("testapp", "Publisher", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("otherapp.Book")),
+        ("author", models.ForeignKey("otherapp.Book", models.CASCADE)),
         ("name", models.CharField(max_length=100)),
     ])
     other_pony = ModelState("otherapp", "Pony", [
@@ -301,17 +306,17 @@ class AutodetectorTests(TestCase):
     third_thing = ModelState("thirdapp", "Thing", [("id", models.AutoField(primary_key=True))])
     book = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ])
     book_proxy_fk = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("thirdapp.AuthorProxy")),
+        ("author", models.ForeignKey("thirdapp.AuthorProxy", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ])
     book_migrations_fk = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("migrations.UnmigratedModel")),
+        ("author", models.ForeignKey("migrations.UnmigratedModel", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ])
     book_with_no_author = ModelState("otherapp", "Book", [
@@ -320,12 +325,12 @@ class AutodetectorTests(TestCase):
     ])
     book_with_author_renamed = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Writer")),
+        ("author", models.ForeignKey("testapp.Writer", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ])
     book_with_field_and_author_renamed = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("writer", models.ForeignKey("testapp.Writer")),
+        ("writer", models.ForeignKey("testapp.Writer", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ])
     book_with_multiple_authors = ModelState("otherapp", "Book", [
@@ -340,7 +345,7 @@ class AutodetectorTests(TestCase):
     ])
     book_foo_together = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ], {
         "index_together": {("author", "title")},
@@ -348,7 +353,7 @@ class AutodetectorTests(TestCase):
     })
     book_foo_together_2 = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ], {
         "index_together": {("title", "author")},
@@ -357,7 +362,7 @@ class AutodetectorTests(TestCase):
     book_foo_together_3 = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
         ("newfield", models.IntegerField()),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ], {
         "index_together": {("title", "newfield")},
@@ -366,7 +371,7 @@ class AutodetectorTests(TestCase):
     book_foo_together_4 = ModelState("otherapp", "Book", [
         ("id", models.AutoField(primary_key=True)),
         ("newfield2", models.IntegerField()),
-        ("author", models.ForeignKey("testapp.Author")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
         ("title", models.CharField(max_length=200)),
     ], {
         "index_together": {("title", "newfield2")},
@@ -374,12 +379,12 @@ class AutodetectorTests(TestCase):
     })
     attribution = ModelState("otherapp", "Attribution", [
         ("id", models.AutoField(primary_key=True)),
-        ("author", models.ForeignKey("testapp.Author")),
-        ("book", models.ForeignKey("otherapp.Book")),
+        ("author", models.ForeignKey("testapp.Author", models.CASCADE)),
+        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
     ])
     edition = ModelState("thirdapp", "Edition", [
         ("id", models.AutoField(primary_key=True)),
-        ("book", models.ForeignKey("otherapp.Book")),
+        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
     ])
     custom_user = ModelState("thirdapp", "CustomUser", [
         ("id", models.AutoField(primary_key=True)),
@@ -393,13 +398,13 @@ class AutodetectorTests(TestCase):
     aardvark_testapp = ModelState("testapp", "Aardvark", [("id", models.AutoField(primary_key=True))])
     aardvark_based_on_author = ModelState("testapp", "Aardvark", [], bases=("testapp.Author", ))
     aardvark_pk_fk_author = ModelState("testapp", "Aardvark", [
-        ("id", models.OneToOneField("testapp.Author", primary_key=True)),
+        ("id", models.OneToOneField("testapp.Author", models.CASCADE, primary_key=True)),
     ])
     knight = ModelState("eggs", "Knight", [("id", models.AutoField(primary_key=True))])
     rabbit = ModelState("eggs", "Rabbit", [
         ("id", models.AutoField(primary_key=True)),
-        ("knight", models.ForeignKey("eggs.Knight")),
-        ("parent", models.ForeignKey("eggs.Rabbit")),
+        ("knight", models.ForeignKey("eggs.Knight", models.CASCADE)),
+        ("parent", models.ForeignKey("eggs.Rabbit", models.CASCADE)),
     ], {"unique_together": {("parent", "knight")}})
 
     def repr_changes(self, changes, include_dependencies=False):
@@ -767,7 +772,7 @@ class AutodetectorTests(TestCase):
             ModelState("testapp", "EntityB", [
                 ("id", models.AutoField(primary_key=True)),
                 ("some_label", models.CharField(max_length=255)),
-                ("entity_a", models.ForeignKey("testapp.EntityA")),
+                ("entity_a", models.ForeignKey("testapp.EntityA", models.CASCADE)),
             ]),
         ])
         after = self.make_project_state([
@@ -776,7 +781,7 @@ class AutodetectorTests(TestCase):
             ]),
             ModelState("testapp", "RenamedEntityB", [
                 ("id", models.AutoField(primary_key=True)),
-                ("entity_a", models.ForeignKey("testapp.EntityA")),
+                ("entity_a", models.ForeignKey("testapp.EntityA", models.CASCADE)),
                 ("some_label", models.CharField(max_length=255)),
             ]),
         ])
@@ -877,6 +882,9 @@ class AutodetectorTests(TestCase):
         self.assertOperationTypes(changes, 'otherapp', 1, ["AddField"])
         self.assertMigrationDependencies(changes, 'otherapp', 0, [])
         self.assertMigrationDependencies(changes, 'otherapp', 1, [("otherapp", "auto_1"), ("testapp", "auto_1")])
+        # both split migrations should be `initial`
+        self.assertTrue(changes['otherapp'][0].initial)
+        self.assertTrue(changes['otherapp'][1].initial)
 
     def test_same_app_circular_fk_dependency(self):
         """
@@ -994,13 +1002,53 @@ class AutodetectorTests(TestCase):
         self.assertOperationAttributes(changes, "testapp", 0, 0, old_name="Author", new_name="NewAuthor")
         self.assertOperationAttributes(changes, "testapp", 0, 1, name="newauthor", table="author_three")
 
+    def test_identical_regex_doesnt_alter(self):
+        from_state = ModelState(
+            "testapp", "model", [("id", models.AutoField(primary_key=True, validators=[
+                RegexValidator(
+                    re.compile('^[-a-zA-Z0-9_]+\\Z'),
+                    "Enter a valid 'slug' consisting of letters, numbers, underscores or hyphens.",
+                    'invalid'
+                )
+            ]))]
+        )
+        to_state = ModelState(
+            "testapp", "model", [("id", models.AutoField(primary_key=True, validators=[validate_slug]))]
+        )
+        before = self.make_project_state([from_state])
+        after = self.make_project_state([to_state])
+        autodetector = MigrationAutodetector(before, after)
+        changes = autodetector._detect_changes()
+        # Right number/type of migrations?
+        self.assertNumberMigrations(changes, "testapp", 0)
+
+    def test_different_regex_does_alter(self):
+        from_state = ModelState(
+            "testapp", "model", [("id", models.AutoField(primary_key=True, validators=[
+                RegexValidator(
+                    re.compile('^[a-z]+\\Z', 32),
+                    "Enter a valid 'slug' consisting of letters, numbers, underscores or hyphens.",
+                    'invalid'
+                )
+            ]))]
+        )
+        to_state = ModelState(
+            "testapp", "model", [("id", models.AutoField(primary_key=True, validators=[validate_slug]))]
+        )
+        before = self.make_project_state([from_state])
+        after = self.make_project_state([to_state])
+        autodetector = MigrationAutodetector(before, after)
+        changes = autodetector._detect_changes()
+        self.assertNumberMigrations(changes, "testapp", 1)
+        self.assertOperationTypes(changes, "testapp", 0, ["AlterField"])
+
     def test_empty_foo_together(self):
         """
         #23452 - Empty unique/index_together shouldn't generate a migration.
         """
         # Explicitly testing for not specified, since this is the case after
         # a CreateModel operation w/o any definition on the original model
-        model_state_not_secified = ModelState("a", "model", [("id", models.AutoField(primary_key=True))])
+        model_state_not_specified = ModelState("a", "model", [("id", models.AutoField(primary_key=True))])
         # Explicitly testing for None, since this was the issue in #23452 after
         # a AlterFooTogether operation with e.g. () as value
         model_state_none = ModelState("a", "model", [
@@ -1028,13 +1076,13 @@ class AutodetectorTests(TestCase):
                 self.fail('Created operation(s) %s from %s' % (ops, msg))
 
         tests = (
-            (model_state_not_secified, model_state_not_secified, '"not specified" to "not specified"'),
-            (model_state_not_secified, model_state_none, '"not specified" to "None"'),
-            (model_state_not_secified, model_state_empty, '"not specified" to "empty"'),
-            (model_state_none, model_state_not_secified, '"None" to "not specified"'),
+            (model_state_not_specified, model_state_not_specified, '"not specified" to "not specified"'),
+            (model_state_not_specified, model_state_none, '"not specified" to "None"'),
+            (model_state_not_specified, model_state_empty, '"not specified" to "empty"'),
+            (model_state_none, model_state_not_specified, '"None" to "not specified"'),
             (model_state_none, model_state_none, '"None" to "None"'),
             (model_state_none, model_state_empty, '"None" to "empty"'),
-            (model_state_empty, model_state_not_secified, '"empty" to "not specified"'),
+            (model_state_empty, model_state_not_specified, '"empty" to "not specified"'),
             (model_state_empty, model_state_none, '"empty" to "None"'),
             (model_state_empty, model_state_empty, '"empty" to "empty"'),
         )
@@ -1264,10 +1312,12 @@ class AutodetectorTests(TestCase):
 
     @override_settings(AUTH_USER_MODEL="thirdapp.CustomUser")
     def test_swappable(self):
-        before = self.make_project_state([self.custom_user])
-        after = self.make_project_state([self.custom_user, self.author_with_custom_user])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            before = self.make_project_state([self.custom_user])
+            after = self.make_project_state([self.custom_user, self.author_with_custom_user])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'testapp', 1)
         self.assertOperationTypes(changes, 'testapp', 0, ["CreateModel"])
@@ -1275,11 +1325,13 @@ class AutodetectorTests(TestCase):
         self.assertMigrationDependencies(changes, 'testapp', 0, [("__setting__", "AUTH_USER_MODEL")])
 
     def test_swappable_changed(self):
-        before = self.make_project_state([self.custom_user, self.author_with_user])
-        with override_settings(AUTH_USER_MODEL="thirdapp.CustomUser"):
-            after = self.make_project_state([self.custom_user, self.author_with_custom_user])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            before = self.make_project_state([self.custom_user, self.author_with_user])
+            with override_settings(AUTH_USER_MODEL="thirdapp.CustomUser"):
+                after = self.make_project_state([self.custom_user, self.author_with_custom_user])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'testapp', 1)
         self.assertOperationTypes(changes, 'testapp', 0, ["AlterField"])
@@ -1769,11 +1821,13 @@ class AutodetectorTests(TestCase):
     @override_settings(AUTH_USER_MODEL="thirdapp.CustomUser")
     def test_swappable_first_setting(self):
         """Tests that swappable models get their CreateModel first."""
-        # Make state
-        before = self.make_project_state([])
-        after = self.make_project_state([self.custom_user_no_inherit, self.aardvark])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            # Make state
+            before = self.make_project_state([])
+            after = self.make_project_state([self.custom_user_no_inherit, self.aardvark])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'thirdapp', 1)
         self.assertOperationTypes(changes, 'thirdapp', 0, ["CreateModel", "CreateModel"])
@@ -1923,14 +1977,14 @@ class AutodetectorTests(TestCase):
         """
         address = ModelState("a", "Address", [
             ("id", models.AutoField(primary_key=True)),
-            ("country", models.ForeignKey("b.DeliveryCountry")),
+            ("country", models.ForeignKey("b.DeliveryCountry", models.CASCADE)),
         ])
         person = ModelState("a", "Person", [
             ("id", models.AutoField(primary_key=True)),
         ])
         apackage = ModelState("b", "APackage", [
             ("id", models.AutoField(primary_key=True)),
-            ("person", models.ForeignKey("a.Person")),
+            ("person", models.ForeignKey("a.Person", models.CASCADE)),
         ])
         country = ModelState("b", "DeliveryCountry", [
             ("id", models.AutoField(primary_key=True)),
@@ -1953,20 +2007,22 @@ class AutodetectorTests(TestCase):
         #23322 - Tests that the dependency resolver knows to explicitly resolve
         swappable models.
         """
-        tenant = ModelState("a", "Tenant", [
-            ("id", models.AutoField(primary_key=True)),
-            ("primary_address", models.ForeignKey("b.Address"))],
-            bases=(AbstractBaseUser, )
-        )
-        address = ModelState("b", "Address", [
-            ("id", models.AutoField(primary_key=True)),
-            ("tenant", models.ForeignKey(settings.AUTH_USER_MODEL)),
-        ])
-        # Make state
-        before = self.make_project_state([])
-        after = self.make_project_state([address, tenant])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            tenant = ModelState("a", "Tenant", [
+                ("id", models.AutoField(primary_key=True)),
+                ("primary_address", models.ForeignKey("b.Address", models.CASCADE))],
+                bases=(AbstractBaseUser, )
+            )
+            address = ModelState("b", "Address", [
+                ("id", models.AutoField(primary_key=True)),
+                ("tenant", models.ForeignKey(settings.AUTH_USER_MODEL, models.CASCADE)),
+            ])
+            # Make state
+            before = self.make_project_state([])
+            after = self.make_project_state([address, tenant])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'a', 2)
         self.assertOperationTypes(changes, 'a', 0, ["CreateModel"])
@@ -1985,20 +2041,22 @@ class AutodetectorTests(TestCase):
         swappable models but with the swappable not being the first migrated
         model.
         """
-        address = ModelState("a", "Address", [
-            ("id", models.AutoField(primary_key=True)),
-            ("tenant", models.ForeignKey(settings.AUTH_USER_MODEL)),
-        ])
-        tenant = ModelState("b", "Tenant", [
-            ("id", models.AutoField(primary_key=True)),
-            ("primary_address", models.ForeignKey("a.Address"))],
-            bases=(AbstractBaseUser, )
-        )
-        # Make state
-        before = self.make_project_state([])
-        after = self.make_project_state([address, tenant])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            address = ModelState("a", "Address", [
+                ("id", models.AutoField(primary_key=True)),
+                ("tenant", models.ForeignKey(settings.AUTH_USER_MODEL, models.CASCADE)),
+            ])
+            tenant = ModelState("b", "Tenant", [
+                ("id", models.AutoField(primary_key=True)),
+                ("primary_address", models.ForeignKey("a.Address", models.CASCADE))],
+                bases=(AbstractBaseUser, )
+            )
+            # Make state
+            before = self.make_project_state([])
+            after = self.make_project_state([address, tenant])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'a', 2)
         self.assertOperationTypes(changes, 'a', 0, ["CreateModel"])
@@ -2016,15 +2074,17 @@ class AutodetectorTests(TestCase):
         #23322 - Tests that the dependency resolver knows to explicitly resolve
         swappable models.
         """
-        person = ModelState("a", "Person", [
-            ("id", models.AutoField(primary_key=True)),
-            ("parent1", models.ForeignKey(settings.AUTH_USER_MODEL, related_name='children'))
-        ])
-        # Make state
-        before = self.make_project_state([])
-        after = self.make_project_state([person])
-        autodetector = MigrationAutodetector(before, after)
-        changes = autodetector._detect_changes()
+        with isolate_lru_cache(apps.get_swappable_settings_name):
+            person = ModelState("a", "Person", [
+                ("id", models.AutoField(primary_key=True)),
+                ("parent1", models.ForeignKey(settings.AUTH_USER_MODEL, models.CASCADE, related_name='children'))
+            ])
+            # Make state
+            before = self.make_project_state([])
+            after = self.make_project_state([person])
+            autodetector = MigrationAutodetector(before, after)
+            changes = autodetector._detect_changes()
+
         # Right number/type of migrations?
         self.assertNumberMigrations(changes, 'a', 1)
         self.assertOperationTypes(changes, 'a', 0, ["CreateModel"])

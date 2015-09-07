@@ -232,14 +232,8 @@ class SilencingCheckTests(SimpleTestCase):
             call_command('check', stdout=out, stderr=err)
         except CommandError:
             self.fail("The mycheck.E001 check should be silenced.")
-        self.assertEqual(out.getvalue(), '')
-        self.assertEqual(
-            err.getvalue(),
-            'System check identified some issues:\n\n'
-            'ERRORS:\n'
-            '?: (myerrorcheck.E001) Error\n\n'
-            'System check identified 1 issue (0 silenced).\n'
-        )
+        self.assertEqual(out.getvalue(), 'System check identified no issues (1 silenced).\n')
+        self.assertEqual(err.getvalue(), '')
 
     @override_settings(SILENCED_SYSTEM_CHECKS=['mywarningcheck.E001'])
     @override_system_checks([custom_warning_system_check])
@@ -282,8 +276,12 @@ class CheckFrameworkReservedNamesTests(IsolateModelsMixin, SimpleTestCase):
             pass
 
         class ModelWithDescriptorCalledCheck(models.Model):
-            check = models.ForeignKey(ModelWithRelatedManagerCalledCheck)
-            article = models.ForeignKey(ModelWithRelatedManagerCalledCheck, related_name='check')
+            check = models.ForeignKey(ModelWithRelatedManagerCalledCheck, models.CASCADE)
+            article = models.ForeignKey(
+                ModelWithRelatedManagerCalledCheck,
+                models.CASCADE,
+                related_name='check',
+            )
 
         errors = checks.run_checks()
         expected = [

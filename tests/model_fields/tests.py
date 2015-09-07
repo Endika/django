@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
 import datetime
@@ -20,6 +21,7 @@ from django.db.models.fields import (
 from django.db.models.fields.files import FileField, ImageField
 from django.test.utils import requires_tz_support
 from django.utils import six, timezone
+from django.utils.encoding import force_str
 from django.utils.functional import lazy
 
 from .models import (
@@ -27,7 +29,8 @@ from .models import (
     Document, FksToBooleans, FkToChar, FloatModel, Foo, GenericIPAddress,
     IntegerModel, NullBooleanModel, PositiveIntegerModel,
     PositiveSmallIntegerModel, Post, PrimaryKeyCharModel, RenamedField,
-    SmallIntegerModel, VerboseNameField, Whiz, WhizIter, WhizIterEmpty,
+    SmallIntegerModel, UnicodeSlugField, VerboseNameField, Whiz, WhizIter,
+    WhizIterEmpty,
 )
 
 
@@ -49,7 +52,6 @@ class BasicFieldTests(test.TestCase):
         """
         Regression test for #13071: NullBooleanField should not throw
         a validation error when given a value of None.
-
         """
         nullboolean = NullBooleanModel(nbfield=None)
         try:
@@ -113,7 +115,6 @@ class BasicFieldTests(test.TestCase):
         self.assertIsInstance(field.formfield(choices_form_class=klass), klass)
 
     def test_field_str(self):
-        from django.utils.encoding import force_str
         f = Foo._meta.get_field('a')
         self.assertEqual(force_str(f), "model_fields.Foo.a")
 
@@ -185,7 +186,7 @@ class ForeignKeyTests(test.TestCase):
 
     def test_warning_when_unique_true_on_fk(self):
         class FKUniqueTrue(models.Model):
-            fk_field = models.ForeignKey(Foo, unique=True)
+            fk_field = models.ForeignKey(Foo, models.CASCADE, unique=True)
 
         model = FKUniqueTrue()
         expected_warnings = [
@@ -211,7 +212,7 @@ class ForeignKeyTests(test.TestCase):
         pending_ops_before = list(apps._pending_operations.items())
 
         class AbstractForeignKeyModel(models.Model):
-            fk = models.ForeignKey('missing.FK')
+            fk = models.ForeignKey('missing.FK', models.CASCADE)
 
             class Meta:
                 abstract = True
@@ -233,7 +234,7 @@ class ManyToManyFieldTests(test.SimpleTestCase):
         pending_ops_before = list(apps._pending_operations.items())
 
         class AbstractManyToManyModel(models.Model):
-            fk = models.ForeignKey('missing.FK')
+            fk = models.ForeignKey('missing.FK', models.CASCADE)
 
             class Meta:
                 abstract = True
@@ -478,8 +479,8 @@ class BooleanFieldTests(test.TestCase):
 class ChoicesTests(test.SimpleTestCase):
     def test_choices_and_field_display(self):
         """
-        Check that get_choices and get_flatchoices interact with
-        get_FIELD_display to return the expected values (#7913).
+        Check that get_choices() interacts with get_FIELD_display() to return
+        the expected values (#7913).
         """
         self.assertEqual(Whiz(c=1).get_c_display(), 'First')    # A nested value
         self.assertEqual(Whiz(c=0).get_c_display(), 'Other')    # A top level value
@@ -514,6 +515,14 @@ class SlugFieldTests(test.TestCase):
         bs = BigS.objects.create(s='slug' * 50)
         bs = BigS.objects.get(pk=bs.pk)
         self.assertEqual(bs.s, 'slug' * 50)
+
+    def test_slugfield_unicode_max_length(self):
+        """
+        SlugField with allow_unicode=True should honor max_length.
+        """
+        bs = UnicodeSlugField.objects.create(s='你好你好' * 50)
+        bs = UnicodeSlugField.objects.get(pk=bs.pk)
+        self.assertEqual(bs.s, '你好你好' * 50)
 
 
 class ValidationTest(test.SimpleTestCase):
@@ -681,7 +690,6 @@ class TypeCoercionTests(test.TestCase):
     Test that database lookups can accept the wrong types and convert
     them with no error: especially on Postgres 8.3+ which does not do
     automatic casting at the DB level. See #10015.
-
     """
     def test_lookup_integer_in_charfield(self):
         self.assertEqual(Post.objects.filter(title=9).count(), 0)
@@ -695,7 +703,6 @@ class FileFieldTests(unittest.TestCase):
         """
         Test that FileField.save_form_data will clear its instance attribute
         value if passed False.
-
         """
         d = Document(myfile='something.txt')
         self.assertEqual(d.myfile, 'something.txt')
@@ -707,7 +714,6 @@ class FileFieldTests(unittest.TestCase):
         """
         Test that FileField.save_form_data considers None to mean "no change"
         rather than "clear".
-
         """
         d = Document(myfile='something.txt')
         self.assertEqual(d.myfile, 'something.txt')
@@ -719,7 +725,6 @@ class FileFieldTests(unittest.TestCase):
         """
         Test that FileField.save_form_data, if passed a truthy value, updates
         its instance attribute.
-
         """
         d = Document(myfile='something.txt')
         self.assertEqual(d.myfile, 'something.txt')

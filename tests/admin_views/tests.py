@@ -43,21 +43,21 @@ from . import customadmin
 from .admin import CityAdmin, site, site2
 from .models import (
     Actor, AdminOrderedAdminMethod, AdminOrderedCallable, AdminOrderedField,
-    AdminOrderedModelMethod, Answer, Article, BarAccount, Book, Category,
-    Chapter, ChapterXtra1, ChapterXtra2, Character, Child, Choice, City,
-    Collector, Color, Color2, ComplexSortedPerson, CoverLetter, CustomArticle,
-    CyclicOne, CyclicTwo, DooHickey, Employee, EmptyModel, ExternalSubscriber,
-    Fabric, FancyDoodad, FieldOverridePost, FilteredManager, FooAccount,
-    FoodDelivery, FunkyTag, Gallery, Grommet, Inquisition, Language,
-    MainPrepopulated, ModelWithStringPrimaryKey, OtherStory, Paper, Parent,
-    ParentWithDependentChildren, Person, Persona, Picture, Pizza, Plot,
-    PlotDetails, PluggableSearchPerson, Podcast, Post, PrePopulatedPost, Promo,
-    Question, Recommendation, Recommender, RelatedPrepopulated, Report,
-    Restaurant, RowLevelChangePermissionModel, SecretHideout, Section,
-    ShortMessage, Simple, State, Story, Subscriber, SuperSecretHideout,
-    SuperVillain, Telegram, TitleTranslation, Topping, UnchangeableObject,
-    UndeletableObject, UnorderedObject, Villain, Vodcast, Whatsit, Widget,
-    Worker, WorkHour,
+    AdminOrderedModelMethod, Answer, Article, BarAccount, Book, Bookmark,
+    Category, Chapter, ChapterXtra1, ChapterXtra2, Character, Child, Choice,
+    City, Collector, Color, Color2, ComplexSortedPerson, CoverLetter,
+    CustomArticle, CyclicOne, CyclicTwo, DooHickey, Employee, EmptyModel,
+    ExternalSubscriber, Fabric, FancyDoodad, FieldOverridePost,
+    FilteredManager, FooAccount, FoodDelivery, FunkyTag, Gallery, Grommet,
+    Inquisition, Language, MainPrepopulated, ModelWithStringPrimaryKey,
+    OtherStory, Paper, Parent, ParentWithDependentChildren, Person, Persona,
+    Picture, Pizza, Plot, PlotDetails, PluggableSearchPerson, Podcast, Post,
+    PrePopulatedPost, Promo, Question, Recommendation, Recommender,
+    RelatedPrepopulated, Report, Restaurant, RowLevelChangePermissionModel,
+    SecretHideout, Section, ShortMessage, Simple, State, Story, Subscriber,
+    SuperSecretHideout, SuperVillain, Telegram, TitleTranslation, Topping,
+    UnchangeableObject, UndeletableObject, UnorderedObject, Villain, Vodcast,
+    Whatsit, Widget, Worker, WorkHour,
 )
 
 
@@ -619,7 +619,7 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
     def test_change_list_null_boolean_display(self):
         Post.objects.create(public=None)
         response = self.client.get(reverse('admin:admin_views_post_changelist'))
-        self.assertContains(response, 'icon-unknown.gif')
+        self.assertContains(response, 'icon-unknown.svg')
 
     def test_i18n_language_non_english_default(self):
         """
@@ -1558,6 +1558,25 @@ class AdminViewPermissionsTest(TestCase):
         self.assertFalse(login.context)
         self.client.get(reverse('admin:logout'))
 
+    def test_login_page_notice_for_non_staff_users(self):
+        """
+        A logged-in non-staff user trying to access the admin index should be
+        presented with the login page and a hint indicating that the current
+        user doesn't have access to it.
+        """
+        hint_template = 'You are authenticated as {}'
+
+        # Anonymous user should not be shown the hint
+        response = self.client.get(self.index_url, follow=True)
+        self.assertContains(response, 'login-form')
+        self.assertNotContains(response, hint_template.format(''), status_code=200)
+
+        # Non-staff user should be shown the hint
+        self.client.login(**self.nostaff_login)
+        response = self.client.get(self.index_url, follow=True)
+        self.assertContains(response, 'login-form')
+        self.assertContains(response, hint_template.format(self.u6.username), status_code=200)
+
     def test_add_view(self):
         """Test add view restricts access and actually adds items."""
 
@@ -2110,7 +2129,6 @@ class AdminViewDeletedObjectsTest(TestCase):
         """
         Cyclic relationships should still cause each object to only be
         listed once.
-
         """
         one = '<li>Cyclic one: <a href="%s">I am recursive</a>' % (
             reverse('admin:admin_views_cyclicone_change', args=(self.cy1.pk,)),
@@ -2162,7 +2180,6 @@ class AdminViewDeletedObjectsTest(TestCase):
         If a deleted object has two relationships from another model,
         both of those should be followed in looking for related
         objects to delete.
-
         """
         should_contain = '<li>Plot: <a href="%s">World Domination</a>' % reverse(
             'admin:admin_views_plot_change', args=(self.pl1.pk,)
@@ -2177,7 +2194,6 @@ class AdminViewDeletedObjectsTest(TestCase):
         If a deleted object has two relationships pointing to it from
         another object, the other object should still only be listed
         once.
-
         """
         should_contain = '<li>Plot: <a href="%s">World Peace</a></li>' % reverse(
             'admin:admin_views_plot_change', args=(self.pl2.pk,)
@@ -2190,7 +2206,6 @@ class AdminViewDeletedObjectsTest(TestCase):
         In the case of an inherited model, if either the child or
         parent-model instance is deleted, both instances are listed
         for deletion, as well as any relationships they have.
-
         """
         should_contain = [
             '<li>Villain: <a href="%s">Bob</a>' % reverse('admin:admin_views_villain_change', args=(self.sv1.pk,)),
@@ -2209,13 +2224,25 @@ class AdminViewDeletedObjectsTest(TestCase):
         """
         If a deleted object has GenericForeignKeys pointing to it,
         those objects should be listed for deletion.
-
         """
         plot = self.pl3
         tag = FunkyTag.objects.create(content_object=plot, name='hott')
         should_contain = '<li>Funky tag: <a href="%s">hott' % reverse(
             'admin:admin_views_funkytag_change', args=(tag.id,))
         response = self.client.get(reverse('admin:admin_views_plot_delete', args=(plot.pk,)))
+        self.assertContains(response, should_contain)
+
+    def test_generic_relations_with_related_query_name(self):
+        """
+        If a deleted object has GenericForeignKey with
+        GenericRelation(related_query_name='...') pointing to it, those objects
+        should be listed for deletion.
+        """
+        bookmark = Bookmark.objects.create(name='djangoproject')
+        tag = FunkyTag.objects.create(content_object=bookmark, name='django')
+        tag_url = reverse('admin:admin_views_funkytag_change', args=(tag.id,))
+        should_contain = '<li>Funky tag: <a href="%s">django' % tag_url
+        response = self.client.get(reverse('admin:admin_views_bookmark_delete', args=(bookmark.pk,)))
         self.assertContains(response, should_contain)
 
 
@@ -2377,6 +2404,16 @@ class AdminViewStringPrimaryKeyTest(TestCase):
         logentry = LogEntry.objects.get(content_type__model__iexact="modelwithstringprimarykey")
         edited_obj = logentry.get_edited_object()
         self.assertEqual(logentry.object_id, str(edited_obj.pk))
+
+    def test_logentry_save(self):
+        """"
+        LogEntry.action_time is a timestamp of the date when the entry was
+        created. It shouldn't be updated on a subsequent save().
+        """
+        logentry = LogEntry.objects.get(content_type__model__iexact="modelwithstringprimarykey")
+        action_time = logentry.action_time
+        logentry.save()
+        self.assertEqual(logentry.action_time, action_time)
 
     def test_deleteconfirmation_link(self):
         "The link from the delete confirmation page referring back to the changeform of the object should be quoted"
@@ -4412,11 +4449,13 @@ class SeleniumAdminViewsFirefoxTests(AdminSeleniumWebDriverTestCase):
         # Main form ----------------------------------------------------------
         self.selenium.find_element_by_css_selector('#id_pubdate').send_keys('2012-02-18')
         self.get_select_option('#id_status', 'option two').click()
-        self.selenium.find_element_by_css_selector('#id_name').send_keys(' this is the mAin nÀMë and it\'s awεšome')
+        self.selenium.find_element_by_css_selector('#id_name').send_keys(' this is the mAin nÀMë and it\'s awεšomeııı')
         slug1 = self.selenium.find_element_by_css_selector('#id_slug1').get_attribute('value')
         slug2 = self.selenium.find_element_by_css_selector('#id_slug2').get_attribute('value')
-        self.assertEqual(slug1, 'main-name-and-its-awesome-2012-02-18')
-        self.assertEqual(slug2, 'option-two-main-name-and-its-awesome')
+        slug3 = self.selenium.find_element_by_css_selector('#id_slug3').get_attribute('value')
+        self.assertEqual(slug1, 'main-name-and-its-awesomeiii-2012-02-18')
+        self.assertEqual(slug2, 'option-two-main-name-and-its-awesomeiii')
+        self.assertEqual(slug3, 'main-n\xe0m\xeb-and-its-aw\u03b5\u0161ome\u0131\u0131\u0131')
 
         # Stacked inlines ----------------------------------------------------
         # Initial inline
@@ -4463,11 +4502,11 @@ class SeleniumAdminViewsFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.wait_page_loaded()
         self.assertEqual(MainPrepopulated.objects.all().count(), 1)
         MainPrepopulated.objects.get(
-            name=' this is the mAin nÀMë and it\'s awεšome',
+            name=' this is the mAin nÀMë and it\'s awεšomeııı',
             pubdate='2012-02-18',
             status='option two',
-            slug1='main-name-and-its-awesome-2012-02-18',
-            slug2='option-two-main-name-and-its-awesome',
+            slug1='main-name-and-its-awesomeiii-2012-02-18',
+            slug2='option-two-main-name-and-its-awesomeiii',
         )
         self.assertEqual(RelatedPrepopulated.objects.all().count(), 4)
         RelatedPrepopulated.objects.get(
@@ -4586,8 +4625,11 @@ class SeleniumAdminViewsFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url=reverse('admin:index'))
         self.selenium.get(full_url)
         self.selenium.find_element_by_class_name('deletelink').click()
+        # Wait until we're on the delete page.
+        self.wait_for('.cancel-link')
         self.selenium.find_element_by_class_name('cancel-link').click()
-        self.wait_page_loaded()
+        # Wait until we're back on the change page.
+        self.wait_for_text('#content h1', 'Change pizza')
         self.assertEqual(self.selenium.current_url, full_url)
         self.assertEqual(Pizza.objects.count(), 1)
 
@@ -4605,8 +4647,11 @@ class SeleniumAdminViewsFirefoxTests(AdminSeleniumWebDriverTestCase):
         self.admin_login(username='super', password='secret', login_url=reverse('admin:index'))
         self.selenium.get(full_url)
         self.selenium.find_element_by_class_name('deletelink').click()
+        # Wait until we're on the delete page.
+        self.wait_for('.cancel-link')
         self.selenium.find_element_by_class_name('cancel-link').click()
-        self.wait_page_loaded()
+        # Wait until we're back on the change page.
+        self.wait_for_text('#content h1', 'Change pizza')
         self.assertEqual(self.selenium.current_url, full_url)
         self.assertEqual(Pizza.objects.count(), 1)
         self.assertEqual(Topping.objects.count(), 2)
@@ -4860,6 +4905,16 @@ class RawIdFieldsTest(TestCase):
         response2 = self.client.get(popup_url)
         self.assertNotContains(response2, "Kilbraken")
         self.assertContains(response2, "Palin")
+
+    def test_list_display_method_same_name_as_reverse_accessor(self):
+        """
+        Should be able to use a ModelAdmin method in list_display that has the
+        same name as a reverse model field ("sketch" in this case).
+        """
+        actor = Actor.objects.create(name="Palin", age=27)
+        Inquisition.objects.create(expected=True, leader=actor, country="England")
+        response = self.client.get(reverse('admin:admin_views_inquisition_changelist'))
+        self.assertContains(response, 'list-display-sketch')
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],

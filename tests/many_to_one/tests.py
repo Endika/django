@@ -57,7 +57,11 @@ class ManyToOneTests(TestCase):
 
         # Create a new article, and add it to the article set.
         new_article2 = Article(headline="Paul's story", pub_date=datetime.date(2006, 1, 17))
-        self.r.article_set.add(new_article2)
+        msg = "<Article: Paul's story> instance isn't saved. Use bulk=False or save the object first."
+        with self.assertRaisesMessage(ValueError, msg):
+            self.r.article_set.add(new_article2)
+
+        self.r.article_set.add(new_article2, bulk=False)
         self.assertEqual(new_article2.reporter.id, self.r.id)
         self.assertQuerysetEqual(self.r.article_set.all(),
             [
@@ -158,31 +162,6 @@ class ManyToOneTests(TestCase):
         # Reporter cannot be null - there should not be a clear or remove method
         self.assertFalse(hasattr(self.r2.article_set, 'remove'))
         self.assertFalse(hasattr(self.r2.article_set, 'clear'))
-
-    def test_assign_unsaved_check_override(self):
-        """
-        #24495 - Assigning an unsaved object to a ForeignKey
-        should be allowed when the allow_unsaved_instance_assignment
-        attribute has been set to True.
-        """
-        class UnsavedForeignKey(models.ForeignKey):
-            # A ForeignKey which can point to an unsaved object
-            allow_unsaved_instance_assignment = True
-
-        class Band(models.Model):
-            name = models.CharField(max_length=50)
-
-        class BandMember(models.Model):
-            band = UnsavedForeignKey(Band)
-            first_name = models.CharField(max_length=50)
-            last_name = models.CharField(max_length=50)
-
-        beatles = Band(name='The Beatles')
-        john = BandMember(first_name='John', last_name='Lennon')
-        # This should not raise an exception as the ForeignKey between member
-        # and band has allow_unsaved_instance_assignment=True.
-        john.band = beatles
-        self.assertEqual(john.band, beatles)
 
     def test_selects(self):
         self.r.article_set.create(headline="John's second story",
@@ -563,15 +542,13 @@ class ManyToOneTests(TestCase):
 
         # Creation using keyword argument and unsaved related instance (#8070).
         p = Parent()
-        with self.assertRaisesMessage(ValueError,
-                'Cannot assign "%r": "%s" instance isn\'t saved in the database.'
-                % (p, Child.parent.field.remote_field.model._meta.object_name)):
-            Child(parent=p)
+        msg = "save() prohibited to prevent data loss due to unsaved related object 'parent'."
+        with self.assertRaisesMessage(ValueError, msg):
+            Child.objects.create(parent=p)
 
-        with self.assertRaisesMessage(ValueError,
-                'Cannot assign "%r": "%s" instance isn\'t saved in the database.'
-                % (p, Child.parent.field.remote_field.model._meta.object_name)):
-            ToFieldChild(parent=p)
+        msg = "save() prohibited to prevent data loss due to unsaved related object 'parent'."
+        with self.assertRaisesMessage(ValueError, msg):
+            ToFieldChild.objects.create(parent=p)
 
         # Creation using attname keyword argument and an id will cause the
         # related object to be fetched.
@@ -609,7 +586,7 @@ class ManyToOneTests(TestCase):
     def test_fk_instantiation_outside_model(self):
         # Regression for #12190 -- Should be able to instantiate a FK outside
         # of a model, and interrogate its related field.
-        cat = models.ForeignKey(Category)
+        cat = models.ForeignKey(Category, models.CASCADE)
         self.assertEqual('id', cat.remote_field.get_related_field().name)
 
     def test_relation_unsaved(self):

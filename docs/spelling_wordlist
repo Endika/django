@@ -79,6 +79,7 @@ Boersma
 boilerplatish
 Bokmål
 bolded
+bookmarklet
 bookmarklets
 Bookmarklets
 boolean
@@ -349,8 +350,6 @@ iendswith
 ies
 iexact
 ifchanged
-ifequal
-ifnotequal
 iframe
 inbox
 Incompliance
@@ -605,6 +604,7 @@ proxied
 proxying
 pseudocode
 psycopg
+Punycode
 Puthraya
 py
 pyformat
@@ -644,6 +644,7 @@ refactoring
 refactorings
 refactors
 referer
+referers
 reflow
 regex
 regexes
@@ -777,6 +778,7 @@ substring
 Substring
 subtemplate
 subtemplates
+subtransactions
 subtree
 subtype
 subviews

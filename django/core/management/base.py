@@ -30,7 +30,6 @@ class CommandError(Exception):
     result, raising this exception (with a sensible description of the
     error) is the preferred way to indicate that something has gone
     wrong in the execution of a command.
-
     """
     pass
 
@@ -71,7 +70,6 @@ def handle_default_options(options):
     Include any default options that all commands should accept here
     so that ManagementUtility can handle them before searching for
     user commands.
-
     """
     if options.settings:
         os.environ['DJANGO_SETTINGS_MODULE'] = options.settings
@@ -89,7 +87,7 @@ class OutputWrapper(object):
 
     @style_func.setter
     def style_func(self, style_func):
-        if style_func and hasattr(self._out, 'isatty') and self._out.isatty():
+        if style_func and self.isatty():
             self._style_func = style_func
         else:
             self._style_func = lambda x: x
@@ -101,6 +99,9 @@ class OutputWrapper(object):
 
     def __getattr__(self, name):
         return getattr(self._out, name)
+
+    def isatty(self):
+        return hasattr(self._out, 'isatty') and self._out.isatty()
 
     def write(self, msg, style_func=None, ending=None):
         ending = self.ending if ending is None else ending
@@ -234,7 +235,6 @@ class BaseCommand(object):
         Return the Django version, which should be correct for all
         built-in Django commands. User-supplied commands should
         override this method.
-
         """
         return django.get_version()
 
@@ -242,7 +242,6 @@ class BaseCommand(object):
         """
         Return a brief description of how to use this command, by
         default from the attribute ``self.help``.
-
         """
         usage = '%%prog %s [options] %s' % (subcommand, self.args)
         if self.help:
@@ -254,7 +253,6 @@ class BaseCommand(object):
         """
         Create and return the ``ArgumentParser`` which will be used to
         parse the arguments to this command.
-
         """
         if not self.use_argparse:
             def store_as_int(option, opt_str, value, parser):
@@ -321,7 +319,6 @@ class BaseCommand(object):
         """
         Print the help message for this command, derived from
         ``self.usage()``.
-
         """
         parser = self.create_parser(prog_name, subcommand)
         parser.print_help()
@@ -435,8 +432,8 @@ class BaseCommand(object):
             debugs = [e for e in all_issues if e.level < checks.INFO and not e.is_silenced()]
             infos = [e for e in all_issues if checks.INFO <= e.level < checks.WARNING and not e.is_silenced()]
             warnings = [e for e in all_issues if checks.WARNING <= e.level < checks.ERROR and not e.is_silenced()]
-            errors = [e for e in all_issues if checks.ERROR <= e.level < checks.CRITICAL]
-            criticals = [e for e in all_issues if checks.CRITICAL <= e.level]
+            errors = [e for e in all_issues if checks.ERROR <= e.level < checks.CRITICAL and not e.is_silenced()]
+            criticals = [e for e in all_issues if checks.CRITICAL <= e.level and not e.is_silenced()]
             sorted_issues = [
                 (criticals, 'CRITICALS'),
                 (errors, 'ERRORS'),
@@ -485,7 +482,6 @@ class BaseCommand(object):
         """
         The actual logic of the command. Subclasses must implement
         this method.
-
         """
         raise NotImplementedError('subclasses of BaseCommand must provide a handle() method')
 
@@ -538,7 +534,6 @@ class LabelCommand(BaseCommand):
 
     If the arguments should be names of installed applications, use
     ``AppCommand`` instead.
-
     """
     label = 'label'
     missing_args_message = "Enter at least one %s." % label
@@ -558,7 +553,6 @@ class LabelCommand(BaseCommand):
         """
         Perform the command's actions for ``label``, which will be the
         string as given on the command line.
-
         """
         raise NotImplementedError('subclasses of LabelCommand must provide a handle_label() method')
 
@@ -572,7 +566,6 @@ class NoArgsCommand(BaseCommand):
     no arguments are passed to the command.
 
     Attempting to pass arguments will raise ``CommandError``.
-
     """
     args = ''
 
@@ -592,6 +585,5 @@ class NoArgsCommand(BaseCommand):
     def handle_noargs(self, **options):
         """
         Perform this command's actions.
-
         """
         raise NotImplementedError('subclasses of NoArgsCommand must provide a handle_noargs() method')

@@ -173,7 +173,6 @@ class HttpResponseBase(six.Iterator):
         - a naive ``datetime.datetime`` object in UTC,
         - an aware ``datetime.datetime`` object in any time zone.
         If it is a ``datetime.datetime`` object then ``max_age`` will be calculated.
-
         """
         value = force_str(value)
         self.cookies[key] = value
@@ -284,6 +283,13 @@ class HttpResponse(HttpResponseBase):
         super(HttpResponse, self).__init__(*args, **kwargs)
         # Content is a bytestring. See the `content` property methods.
         self.content = content
+
+    def __repr__(self):
+        return '<%(cls)s status_code=%(status_code)d, "%(content_type)s">' % {
+            'cls': self.__class__.__name__,
+            'status_code': self.status_code,
+            'content_type': self['Content-Type'],
+        }
 
     def serialize(self):
         """Full HTTP message, including headers, as a bytestring."""
@@ -403,6 +409,14 @@ class HttpResponseRedirectBase(HttpResponse):
 
     url = property(lambda self: self['Location'])
 
+    def __repr__(self):
+        return '<%(cls)s status_code=%(status_code)d, "%(content_type)s", url="%(url)s">' % {
+            'cls': self.__class__.__name__,
+            'status_code': self.status_code,
+            'content_type': self['Content-Type'],
+            'url': self.url,
+        }
+
 
 class HttpResponseRedirect(HttpResponseRedirectBase):
     status_code = 302
@@ -445,6 +459,14 @@ class HttpResponseNotAllowed(HttpResponse):
         super(HttpResponseNotAllowed, self).__init__(*args, **kwargs)
         self['Allow'] = ', '.join(permitted_methods)
 
+    def __repr__(self):
+        return '<%(cls)s [%(methods)s] status_code=%(status_code)d, "%(content_type)s">' % {
+            'cls': self.__class__.__name__,
+            'status_code': self.status_code,
+            'content_type': self['Content-Type'],
+            'methods': self['Allow'],
+        }
+
 
 class HttpResponseGone(HttpResponse):
     status_code = 410
@@ -469,12 +491,16 @@ class JsonResponse(HttpResponse):
       ``django.core.serializers.json.DjangoJSONEncoder``.
     :param safe: Controls if only ``dict`` objects may be serialized. Defaults
       to ``True``.
+    :param json_dumps_params: A dictionary of kwargs passed to json.dumps().
     """
 
-    def __init__(self, data, encoder=DjangoJSONEncoder, safe=True, **kwargs):
+    def __init__(self, data, encoder=DjangoJSONEncoder, safe=True,
+                 json_dumps_params=None, **kwargs):
         if safe and not isinstance(data, dict):
             raise TypeError('In order to allow non-dict objects to be '
                 'serialized set the safe parameter to False')
+        if json_dumps_params is None:
+            json_dumps_params = {}
         kwargs.setdefault('content_type', 'application/json')
-        data = json.dumps(data, cls=encoder)
+        data = json.dumps(data, cls=encoder, **json_dumps_params)
         super(JsonResponse, self).__init__(content=data, **kwargs)

@@ -12,7 +12,7 @@ from django.conf import settings
 from django.utils import six, timezone
 from django.utils.deprecation import RemovedInDjango110Warning
 from django.utils.encoding import force_text, smart_text
-from django.utils.html import format_html
+from django.utils.html import conditional_escape, format_html
 from django.utils.lorem_ipsum import paragraphs, words
 from django.utils.safestring import mark_safe
 
@@ -479,9 +479,16 @@ class URLNode(Node):
         try:
             current_app = context.request.current_app
         except AttributeError:
-            # Change the fallback value to None when the deprecation path for
+            # Leave only the else block when the deprecation path for
             # Context.current_app completes in Django 1.10.
-            current_app = context.current_app
+            # Can also remove the Context.is_current_app_set property.
+            if context.is_current_app_set:
+                current_app = context.current_app
+            else:
+                try:
+                    current_app = context.request.resolver_match.namespace
+                except AttributeError:
+                    current_app = None
 
         # Try to look up the URL twice: once given the view name, and again
         # relative to what we guess is the "main" app. If they both fail,
@@ -512,6 +519,8 @@ class URLNode(Node):
             context[self.asvar] = url
             return ''
         else:
+            if context.autoescape:
+                url = conditional_escape(url)
             return url
 
 
@@ -633,7 +642,6 @@ def cycle(parser, token):
             {% cycle 'row1' 'row2' as rowcolors silent %}
             <tr class="{{ rowcolors }}">{% include "subtemplate.html " %}</tr>
         {% endfor %}
-
     """
     # Note: This returns the exact same node on each {% cycle name %} call;
     # that is, the node object returned from {% cycle a b c as name %} and the
@@ -782,7 +790,6 @@ def firstof(parser, token):
     Or if only some variables should be escaped, you can use::
 
         {% firstof var1 var2|safe var3 "<strong>fallback value</strong>"|safe %}
-
     """
     bits = token.split_contents()[1:]
     asvar = None
@@ -857,7 +864,6 @@ def do_for(parser, token):
         ``forloop.parentloop``      For nested loops, this is the loop "above" the
                                     current one
         ==========================  ================================================
-
     """
     bits = token.split_contents()
     if len(bits) < 4:
@@ -1168,7 +1174,6 @@ def load(parser, token):
     a library::
 
         {% load byline from news %}
-
     """
     # token.split_contents() isn't useful here because this tag doesn't accept variable as arguments
     bits = token.contents.split()
@@ -1301,7 +1306,6 @@ def regroup(parser, token):
     before using it, i.e.::
 
         {% regroup people|dictsort:"gender" by gender as grouped %}
-
     """
     bits = token.split_contents()
     if len(bits) != 6:
@@ -1453,7 +1457,6 @@ def url(parser, token):
         {% with url_name="client-detail-view" %}
         {% url url_name client.id %}
         {% endwith %}
-
     """
     bits = token.split_contents()
     if len(bits) < 2:

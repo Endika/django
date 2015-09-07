@@ -30,6 +30,9 @@ details on these changes.
 
 * ``Field.remote_field.to`` attribute will be removed.
 
+* The ``on_delete`` argument for ``ForeignKey`` and ``OneToOneField``  will be
+  required.
+
 * ``django.db.models.fields.add_lazy_relation()`` will be removed.
 
 * When time zone support is enabled, database backends that don't support time
@@ -41,6 +44,8 @@ details on these changes.
   removed.
 
 * The ``GeoManager`` and ``GeoQuerySet`` classes will be removed.
+
+* The ``django.contrib.gis.geoip`` module will be removed.
 
 * The ``supports_recursion`` check for template loaders will be removed from:
 
@@ -78,6 +83,16 @@ details on these changes.
 
 * Support for setting a URL instance namespace without an application
   namespace will be removed.
+
+* ``Field._get_val_from_obj()`` will be removed in favor of
+  ``Field.value_from_object()``.
+
+* ``django.template.loaders.eggs.Loader`` will be removed.
+
+* The ``current_app`` parameter to the ``contrib.auth`` views will be removed.
+
+* The ``callable_obj`` keyword argument to
+  ``SimpleTestCase.assertRaisesMessage()`` will be removed.
 
 .. _deprecation-removed-in-1.10:
 
@@ -235,7 +250,7 @@ details on these changes.
   will be removed.
 
 * ``GeoQuerySet`` aggregate methods ``collect()``, ``extent()``, ``extent3d()``,
-  ``makeline()``, and ``union()`` will be removed.
+  ``make_line()``, and ``unionagg()`` will be removed.
 
 * Ability to specify ``ContentType.name`` when creating a content type instance
   will be removed.
@@ -246,6 +261,9 @@ details on these changes.
 
 * Support for the syntax of ``{% cycle %}`` that uses comma-separated arguments
   will be removed.
+
+* The warning that :class:`~django.core.signing.Signer` issues when given an
+  invalid separator will become an exception.
 
 .. _deprecation-removed-in-1.9:
 
@@ -271,9 +289,12 @@ details on these changes.
 * ``allow_syncdb`` on database routers will no longer automatically become
   ``allow_migrate``.
 
-* The legacy method of syncing apps without migrations will be removed,
-  and migrations will become compulsory for all apps. This includes automatic
-  loading of ``initial_data`` fixtures and support for initial SQL data.
+* Automatic syncing of apps without migrations will be removed. Migrations will
+  become compulsory for all apps unless you pass the ``--run-syncdb`` option to
+  ``migrate``.
+
+* Support for automatic loading of ``initial_data`` fixtures and initial SQL
+  data will be removed.
 
 * All models will need to be defined inside an installed application or
   declare an explicit :attr:`~django.db.models.Options.app_label`.

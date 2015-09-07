@@ -107,8 +107,6 @@ def setup(verbosity, test_labels):
     state = {
         'INSTALLED_APPS': settings.INSTALLED_APPS,
         'ROOT_URLCONF': getattr(settings, "ROOT_URLCONF", ""),
-        # Remove the following line in Django 1.10.
-        'TEMPLATE_DIRS': settings.TEMPLATE_DIRS,
         'TEMPLATES': settings.TEMPLATES,
         'LANGUAGE_CODE': settings.LANGUAGE_CODE,
         'STATIC_URL': settings.STATIC_URL,
@@ -121,8 +119,6 @@ def setup(verbosity, test_labels):
     settings.ROOT_URLCONF = 'urls'
     settings.STATIC_URL = '/static/'
     settings.STATIC_ROOT = os.path.join(TMPDIR, 'static')
-    # Remove the following line in Django 1.10.
-    settings.TEMPLATE_DIRS = [TEMPLATE_DIR]
     settings.TEMPLATES = [{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [TEMPLATE_DIR],
@@ -144,6 +140,7 @@ def setup(verbosity, test_labels):
         # us skip creating migrations for the test models.
         'auth': 'django.contrib.auth.tests.migrations',
         'contenttypes': 'contenttypes_tests.migrations',
+        'sessions': 'sessions_tests.migrations',
     }
     log_config = DEFAULT_LOGGING
     # Filter out non-error logging so we don't have to capture it in lots of

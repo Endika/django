@@ -15,6 +15,7 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.core.mail import EmailMessage
+from django.db import models
 from django.forms.models import BaseModelFormSet
 from django.http import HttpResponse, StreamingHttpResponse
 from django.utils.safestring import mark_safe
@@ -23,9 +24,9 @@ from django.utils.six import StringIO
 from .models import (
     Actor, AdminOrderedAdminMethod, AdminOrderedCallable, AdminOrderedField,
     AdminOrderedModelMethod, Album, Answer, Article, BarAccount, Book,
-    Category, Chapter, ChapterXtra1, Child, ChildOfReferer, Choice, City,
-    Collector, Color, Color2, ComplexSortedPerson, CoverLetter, CustomArticle,
-    CyclicOne, CyclicTwo, DependentChild, DooHickey, EmptyModel,
+    Bookmark, Category, Chapter, ChapterXtra1, Child, ChildOfReferer, Choice,
+    City, Collector, Color, Color2, ComplexSortedPerson, CoverLetter,
+    CustomArticle, CyclicOne, CyclicTwo, DependentChild, DooHickey, EmptyModel,
     EmptyModelHidden, EmptyModelMixin, EmptyModelVisible, ExplicitlyProvidedPK,
     ExternalSubscriber, Fabric, FancyDoodad, FieldOverridePost,
     FilteredManager, FooAccount, FoodDelivery, FunkyTag, Gadget, Gallery,
@@ -168,7 +169,11 @@ class ThingAdmin(admin.ModelAdmin):
 
 
 class InquisitionAdmin(admin.ModelAdmin):
-    list_display = ('leader', 'country', 'expected')
+    list_display = ('leader', 'country', 'expected', 'sketch')
+
+    def sketch(self, obj):
+        # A method with the same name as a reverse accessor.
+        return 'list-display-sketch'
 
 
 class SketchAdmin(admin.ModelAdmin):
@@ -654,6 +659,7 @@ class RelatedPrepopulatedInline1(admin.StackedInline):
             'fields': (('pubdate', 'status'), ('name', 'slug1', 'slug2',),)
         }),
     )
+    formfield_overrides = {models.CharField: {'strip': False}}
     model = RelatedPrepopulated
     extra = 1
     prepopulated_fields = {'slug1': ['name', 'pubdate'],
@@ -671,11 +677,15 @@ class MainPrepopulatedAdmin(admin.ModelAdmin):
     inlines = [RelatedPrepopulatedInline1, RelatedPrepopulatedInline2]
     fieldsets = (
         (None, {
-            'fields': (('pubdate', 'status'), ('name', 'slug1', 'slug2',),)
+            'fields': (('pubdate', 'status'), ('name', 'slug1', 'slug2', 'slug3'))
         }),
     )
-    prepopulated_fields = {'slug1': ['name', 'pubdate'],
-                           'slug2': ['status', 'name']}
+    formfield_overrides = {models.CharField: {'strip': False}}
+    prepopulated_fields = {
+        'slug1': ['name', 'pubdate'],
+        'slug2': ['status', 'name'],
+        'slug3': ['name'],
+    }
 
 
 class UnorderedObjectAdmin(admin.ModelAdmin):
@@ -902,6 +912,7 @@ site.register(Villain)
 site.register(SuperVillain)
 site.register(Plot)
 site.register(PlotDetails)
+site.register(Bookmark)
 site.register(CyclicOne)
 site.register(CyclicTwo)
 site.register(WorkHour, WorkHourAdmin)

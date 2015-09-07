@@ -501,6 +501,37 @@ class FormsTestCase(SimpleTestCase):
 <option value="P" selected="selected">Paul McCartney</option>
 </select>""")
 
+    def test_form_with_disabled_fields(self):
+        class PersonForm(Form):
+            name = CharField()
+            birthday = DateField(disabled=True)
+
+        class PersonFormFieldInitial(Form):
+            name = CharField()
+            birthday = DateField(disabled=True, initial=datetime.date(1974, 8, 16))
+
+        # Disabled fields are generally not transmitted by user agents.
+        # The value from the form's initial data is used.
+        f1 = PersonForm({'name': 'John Doe'}, initial={'birthday': datetime.date(1974, 8, 16)})
+        f2 = PersonFormFieldInitial({'name': 'John Doe'})
+        for form in (f1, f2):
+            self.assertTrue(form.is_valid())
+            self.assertEqual(
+                form.cleaned_data,
+                {'birthday': datetime.date(1974, 8, 16), 'name': 'John Doe'}
+            )
+
+        # Values provided in the form's data are ignored.
+        data = {'name': 'John Doe', 'birthday': '1984-11-10'}
+        f1 = PersonForm(data, initial={'birthday': datetime.date(1974, 8, 16)})
+        f2 = PersonFormFieldInitial(data)
+        for form in (f1, f2):
+            self.assertTrue(form.is_valid())
+            self.assertEqual(
+                form.cleaned_data,
+                {'birthday': datetime.date(1974, 8, 16), 'name': 'John Doe'}
+            )
+
     def test_hidden_data(self):
         class SongForm(Form):
             name = CharField()
@@ -2257,6 +2288,25 @@ class FormsTestCase(SimpleTestCase):
         boundfield = SomeForm()['field']
 
         self.assertHTMLEqual(boundfield.label_tag(), '<label for="id_field"></label>')
+
+    def test_boundfield_id_for_label(self):
+        class SomeForm(Form):
+            field = CharField(label='')
+
+        self.assertEqual(SomeForm()['field'].id_for_label, 'id_field')
+
+    def test_boundfield_id_for_label_override_by_attrs(self):
+        """
+        If an id is provided in `Widget.attrs`, it overrides the generated ID,
+        unless it is `None`.
+        """
+        class SomeForm(Form):
+            field = CharField(widget=forms.TextInput(attrs={'id': 'myCustomID'}))
+            field_none = CharField(widget=forms.TextInput(attrs={'id': None}))
+
+        form = SomeForm()
+        self.assertEqual(form['field'].id_for_label, 'myCustomID')
+        self.assertEqual(form['field_none'].id_for_label, 'id_field_none')
 
     def test_label_tag_override(self):
         """

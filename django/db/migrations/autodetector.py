@@ -11,6 +11,7 @@ from django.db.migrations.migration import Migration
 from django.db.migrations.operations.models import AlterModelOptions
 from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.questioner import MigrationQuestioner
+from django.db.migrations.utils import COMPILED_REGEX_TYPE, RegexObject
 from django.utils import six
 
 from .topological_sort import stable_topological_sort
@@ -33,6 +34,7 @@ class MigrationAutodetector(object):
         self.from_state = from_state
         self.to_state = to_state
         self.questioner = questioner or MigrationQuestioner()
+        self.existing_apps = {app for app, model in from_state.models}
 
     def changes(self, graph, trim_to_apps=None, convert_apps=None, migration_name=None):
         """
@@ -61,6 +63,8 @@ class MigrationAutodetector(object):
                 key: self.deep_deconstruct(value)
                 for key, value in obj.items()
             }
+        elif isinstance(obj, COMPILED_REGEX_TYPE):
+            return RegexObject(obj)
         elif isinstance(obj, type):
             # If this is a type that implements 'deconstruct' as an instance method,
             # avoid treating this as being deconstructible itself - see #22951
@@ -297,6 +301,7 @@ class MigrationAutodetector(object):
                         instance = subclass("auto_%i" % (len(self.migrations.get(app_label, [])) + 1), app_label)
                         instance.dependencies = list(dependencies)
                         instance.operations = chopped
+                        instance.initial = app_label not in self.existing_apps
                         self.migrations.setdefault(app_label, []).append(instance)
                         chop_mode = False
                     else:
@@ -1152,6 +1157,7 @@ class MigrationAutodetector(object):
         Given a migration name, tries to extract a number from the
         beginning of it. If no number found, returns None.
         """
-        if re.match(r"^\d+_", name):
-            return int(name.split("_")[0])
+        match = re.match(r'^\d+', name)
+        if match:
+            return int(match.group())
         return None

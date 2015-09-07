@@ -556,7 +556,8 @@ class Query(object):
             # distinct joins for the same connection in rhs query, then the
             # combined query must have two joins, too.
             reuse.discard(new_alias)
-            change_map[alias] = new_alias
+            if alias != new_alias:
+                change_map[alias] = new_alias
             if not rhs.alias_refcount[alias]:
                 # The alias was unused in the rhs query. Unref it so that it
                 # will be unused in the new query, too. We have to add and
@@ -950,7 +951,7 @@ class Query(object):
         if model in seen:
             return seen[model]
         chain = opts.get_base_chain(model)
-        if chain is None:
+        if not chain:
             return alias
         curr_opts = opts
         for int_model in chain:
@@ -1292,9 +1293,15 @@ class Query(object):
             cur_names_with_path = (name, [])
             if name == 'pk':
                 name = opts.pk.name
+
+            field = None
             try:
                 field = opts.get_field(name)
+            except FieldDoesNotExist:
+                if name in self.annotation_select:
+                    field = self.annotation_select[name].output_field
 
+            if field is not None:
                 # Fields that contain one-to-many relations with a generic
                 # model (like a GenericForeignKey) cannot generate reverse
                 # relations and therefore cannot be used for reverse querying.
@@ -1305,8 +1312,11 @@ class Query(object):
                         "querying. If it is a GenericForeignKey, consider "
                         "adding a GenericRelation." % name
                     )
-                model = field.model._meta.concrete_model
-            except FieldDoesNotExist:
+                try:
+                    model = field.model._meta.concrete_model
+                except AttributeError:
+                    model = None
+            else:
                 # We didn't find the current field, so move position back
                 # one step.
                 pos -= 1
@@ -1643,6 +1653,11 @@ class Query(object):
         for item in ordering:
             if not hasattr(item, 'resolve_expression') and not ORDER_PATTERN.match(item):
                 errors.append(item)
+            if getattr(item, 'contains_aggregate', False):
+                raise FieldError(
+                    'Using an aggregate in order_by() without also including '
+                    'it in annotate() is not allowed: %s' % item
+                )
         if errors:
             raise FieldError('Invalid order_by arguments: %s' % errors)
         if ordering:
@@ -1674,8 +1689,8 @@ class Query(object):
         for col in self.select:
             self.group_by.append(col)
 
-        if self._annotations:
-            for alias, annotation in six.iteritems(self.annotations):
+        if self.annotation_select:
+            for alias, annotation in six.iteritems(self.annotation_select):
                 for col in annotation.get_group_by_cols():
                     self.group_by.append(col)
 

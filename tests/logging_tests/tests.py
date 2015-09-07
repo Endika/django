@@ -334,7 +334,7 @@ class AdminEmailHandlerTest(SimpleTestCase):
         msg = mail.outbox[0]
         self.assertEqual(msg.to, ['admin@example.com'])
         self.assertEqual(msg.subject, "[Django] ERROR (EXTERNAL IP): message")
-        self.assertIn("path:%s" % url_path, msg.body)
+        self.assertIn("Report at %s" % url_path, msg.body)
 
     @override_settings(
         MANAGERS=[('manager', 'manager@example.com')],
@@ -351,6 +351,25 @@ class AdminEmailHandlerTest(SimpleTestCase):
         handler.emit(record)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ['manager@example.com'])
+
+    @override_settings(ALLOWED_HOSTS='example.com')
+    def test_disallowed_host_doesnt_crash(self):
+        admin_email_handler = self.get_admin_email_handler(self.logger)
+        old_include_html = admin_email_handler.include_html
+
+        # Text email
+        admin_email_handler.include_html = False
+        try:
+            self.client.get('/', HTTP_HOST='evil.com')
+        finally:
+            admin_email_handler.include_html = old_include_html
+
+        # HTML email
+        admin_email_handler.include_html = True
+        try:
+            self.client.get('/', HTTP_HOST='evil.com')
+        finally:
+            admin_email_handler.include_html = old_include_html
 
 
 class SettingsConfigTest(AdminScriptTestCase):
@@ -419,7 +438,7 @@ class SecurityLoggerTest(SimpleTestCase):
     def test_suspicious_email_admins(self):
         self.client.get('/suspicious/')
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('path:/suspicious/,', mail.outbox[0].body)
+        self.assertIn('Report at /suspicious/', mail.outbox[0].body)
 
 
 class SettingsCustomLoggingTest(AdminScriptTestCase):

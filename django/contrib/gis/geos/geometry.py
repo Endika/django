@@ -4,6 +4,7 @@
 """
 from __future__ import unicode_literals
 
+import json
 from ctypes import addressof, byref, c_double
 
 from django.contrib.gis import gdal
@@ -11,7 +12,7 @@ from django.contrib.gis.geometry.regex import hex_regex, json_regex, wkt_regex
 from django.contrib.gis.geos import prototypes as capi
 from django.contrib.gis.geos.base import GEOSBase
 from django.contrib.gis.geos.coordseq import GEOSCoordSeq
-from django.contrib.gis.geos.error import GEOSException, GEOSIndexError
+from django.contrib.gis.geos.error import GEOSException
 from django.contrib.gis.geos.libgeos import GEOM_PTR
 from django.contrib.gis.geos.mutable_list import ListMixin
 from django.contrib.gis.geos.prepared import PreparedGeometry
@@ -25,9 +26,6 @@ from django.utils.encoding import force_bytes, force_text
 class GEOSGeometry(GEOSBase, ListMixin):
     "A class that, generally, encapsulates a GEOS geometry."
 
-    # Raise GEOSIndexError instead of plain IndexError
-    # (see ticket #4740 and GEOSIndexError docstring)
-    _IndexError = GEOSIndexError
     _GEOS_CLASSES = None
 
     ptr_type = GEOM_PTR
@@ -411,12 +409,9 @@ class GEOSGeometry(GEOSBase, ListMixin):
     @property
     def json(self):
         """
-        Returns GeoJSON representation of this Geometry if GDAL is installed.
+        Returns GeoJSON representation of this Geometry.
         """
-        if gdal.HAS_GDAL:
-            return self.ogr.json
-        else:
-            raise GEOSException('GeoJSON output only supported when GDAL is installed.')
+        return json.dumps({'type': self.__class__.__name__, 'coordinates': self.coords})
     geojson = json
 
     @property

@@ -57,13 +57,13 @@ class Track(NamedModel):
 
 
 class MultiFields(NamedModel):
-    city = models.ForeignKey(City)
+    city = models.ForeignKey(City, models.CASCADE)
     point = models.PointField()
     poly = models.PolygonField()
 
     class Meta:
         unique_together = ('city', 'point')
-        required_db_features = ['gis_enabled']
+        required_db_features = ['gis_enabled', 'supports_geometry_field_unique_index']
 
 
 class Truth(models.Model):

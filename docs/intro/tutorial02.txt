@@ -26,7 +26,7 @@ settings:
 
 * :setting:`ENGINE <DATABASE-ENGINE>` -- Either
   ``'django.db.backends.sqlite3'``,
-  ``'django.db.backends.postgresql_psycopg2'``,
+  ``'django.db.backends.postgresql'``,
   ``'django.db.backends.mysql'``, or
   ``'django.db.backends.oracle'``. Other backends are :ref:`also available
   <third-party-notes>`.
@@ -141,7 +141,7 @@ These concepts are represented by simple Python classes. Edit the
 
 
     class Choice(models.Model):
-        question = models.ForeignKey(Question)
+        question = models.ForeignKey(Question, on_delete=models.CASCADE)
         choice_text = models.CharField(max_length=200)
         votes = models.IntegerField(default=0)
 
@@ -206,13 +206,13 @@ look like this:
     :filename: mysite/settings.py
 
     INSTALLED_APPS = [
+        'polls',
         'django.contrib.admin',
         'django.contrib.auth',
         'django.contrib.contenttypes',
         'django.contrib.sessions',
         'django.contrib.messages',
         'django.contrib.staticfiles',
-        'polls',
     ]
 
 Now Django knows to include the ``polls`` app. Let's run another command:

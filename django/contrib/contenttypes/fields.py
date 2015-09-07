@@ -7,9 +7,10 @@ from django.core import checks
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.db import DEFAULT_DB_ALIAS, connection, models, router, transaction
 from django.db.models import DO_NOTHING, signals
-from django.db.models.base import ModelBase
+from django.db.models.base import ModelBase, make_foreign_order_accessors
 from django.db.models.fields.related import (
     ForeignObject, ForeignObjectRel, ForeignRelatedObjectsDescriptor,
+    lazy_related_operation,
 )
 from django.db.models.query_utils import PathInfo
 from django.utils.encoding import python_2_unicode_compatible, smart_text
@@ -41,8 +42,6 @@ class GenericForeignKey(object):
     related_model = None
     remote_field = None
 
-    allow_unsaved_instance_assignment = False
-
     def __init__(self, ct_field='content_type', fk_field='object_id', for_concrete_model=True):
         self.ct_field = ct_field
         self.fk_field = fk_field
@@ -62,6 +61,20 @@ class GenericForeignKey(object):
             signals.pre_init.connect(self.instance_pre_init, sender=cls)
 
         setattr(cls, name, self)
+
+    def get_filter_kwargs_for_object(self, obj):
+        """See corresponding method on Field"""
+        return {
+            self.fk_field: getattr(obj, self.fk_field),
+            self.ct_field: getattr(obj, self.ct_field),
+        }
+
+    def get_forward_related_filter(self, obj):
+        """See corresponding method on RelatedField"""
+        return {
+            self.fk_field: obj.pk,
+            self.ct_field: ContentType.objects.get_for_model(obj).pk,
+        }
 
     def __str__(self):
         model = self.model
@@ -253,11 +266,6 @@ class GenericForeignKey(object):
         if value is not None:
             ct = self.get_content_type(obj=value)
             fk = value._get_pk_val()
-            if not self.allow_unsaved_instance_assignment and fk is None:
-                raise ValueError(
-                    'Cannot assign "%r": "%s" instance isn\'t saved in the database.' %
-                    (value, value._meta.object_name)
-                )
 
         setattr(instance, self.ct_field, ct)
         setattr(instance, self.fk_field, fk)
@@ -303,6 +311,7 @@ class GenericRelation(ForeignObject):
         )
 
         kwargs['blank'] = True
+        kwargs['on_delete'] = models.CASCADE
         kwargs['editable'] = False
         kwargs['serialize'] = False
 
@@ -373,6 +382,21 @@ class GenericRelation(ForeignObject):
         super(GenericRelation, self).contribute_to_class(cls, name, **kwargs)
         self.model = cls
         setattr(cls, self.name, ReverseGenericRelatedObjectsDescriptor(self.remote_field))
+
+        # Add get_RELATED_order() and set_RELATED_order() methods if the model
+        # on the other end of this relation is ordered with respect to this.
+        def matching_gfk(field):
+            return (
+                isinstance(field, GenericForeignKey) and
+                self.content_type_field_name == field.ct_field and
+                self.object_id_field_name == field.fk_field
+            )
+
+        def make_generic_foreign_order_accessors(related_model, model):
+            if matching_gfk(model._meta.order_with_respect_to):
+                make_foreign_order_accessors(model, related_model)
+
+        lazy_related_operation(make_generic_foreign_order_accessors, self.model, self.remote_field.model)
 
     def set_attributes_from_rel(self):
         pass
@@ -500,15 +524,38 @@ def create_generic_related_manager(superclass, rel):
                     False,
                     self.prefetch_cache_name)
 
-        def add(self, *objs):
+        def add(self, *objs, **kwargs):
+            bulk = kwargs.pop('bulk', True)
             db = router.db_for_write(self.model, instance=self.instance)
-            with transaction.atomic(using=db, savepoint=False):
+
+            def check_and_update_obj(obj):
+                if not isinstance(obj, self.model):
+                    raise TypeError("'%s' instance expected, got %r" % (
+                        self.model._meta.object_name, obj
+                    ))
+                setattr(obj, self.content_type_field_name, self.content_type)
+                setattr(obj, self.object_id_field_name, self.pk_val)
+
+            if bulk:
+                pks = []
                 for obj in objs:
-                    if not isinstance(obj, self.model):
-                        raise TypeError("'%s' instance expected" % self.model._meta.object_name)
-                    setattr(obj, self.content_type_field_name, self.content_type)
-                    setattr(obj, self.object_id_field_name, self.pk_val)
-                    obj.save()
+                    if obj._state.adding or obj._state.db != db:
+                        raise ValueError(
+                            "%r instance isn't saved. Use bulk=False or save "
+                            "the object first. but must be." % obj
+                        )
+                    check_and_update_obj(obj)
+                    pks.append(obj.pk)
+
+                self.model._base_manager.using(db).filter(pk__in=pks).update(**{
+                    self.content_type_field_name: self.content_type,
+                    self.object_id_field_name: self.pk_val,
+                })
+            else:
+                with transaction.atomic(using=db, savepoint=False):
+                    for obj in objs:
+                        check_and_update_obj(obj)
+                        obj.save()
         add.alters_data = True
 
         def remove(self, *objs, **kwargs):
@@ -541,13 +588,14 @@ def create_generic_related_manager(superclass, rel):
             # could be affected by `manager.clear()`. Refs #19816.
             objs = tuple(objs)
 
+            bulk = kwargs.pop('bulk', True)
             clear = kwargs.pop('clear', False)
 
             db = router.db_for_write(self.model, instance=self.instance)
             with transaction.atomic(using=db, savepoint=False):
                 if clear:
                     self.clear()
-                    self.add(*objs)
+                    self.add(*objs, bulk=bulk)
                 else:
                     old_objs = set(self.using(db).all())
                     new_objs = []
@@ -558,7 +606,7 @@ def create_generic_related_manager(superclass, rel):
                             new_objs.append(obj)
 
                     self.remove(*old_objs)
-                    self.add(*new_objs)
+                    self.add(*new_objs, bulk=bulk)
         set.alters_data = True
 
         def create(self, **kwargs):

@@ -19,7 +19,7 @@ from django.core import checks, exceptions, validators
 # django.core.exceptions. It is retained here for backwards compatibility
 # purposes.
 from django.core.exceptions import FieldDoesNotExist  # NOQA
-from django.db import connection
+from django.db import connection, connections, router
 from django.db.models.lookups import (
     Lookup, RegisterLookupMixin, Transform, default_lookups,
 )
@@ -29,7 +29,9 @@ from django.utils.datastructures import DictWrapper
 from django.utils.dateparse import (
     parse_date, parse_datetime, parse_duration, parse_time,
 )
-from django.utils.deprecation import RemovedInDjango20Warning
+from django.utils.deprecation import (
+    RemovedInDjango20Warning, warn_about_renamed_method,
+)
 from django.utils.duration import duration_string
 from django.utils.encoding import (
     force_bytes, force_text, python_2_unicode_compatible, smart_text,
@@ -313,7 +315,11 @@ class Field(RegisterLookupMixin):
             return []
 
     def _check_backend_specific_checks(self, **kwargs):
-        return connection.validation.check_field(self, **kwargs)
+        app_label = self.model._meta.app_label
+        for db in connections:
+            if router.allow_migrate(db, app_label, model=self.model):
+                return connections[db].validation.check_field(self, **kwargs)
+        return []
 
     def _check_deprecation_details(self):
         if self.system_check_removed_details is not None:
@@ -672,6 +678,13 @@ class Field(RegisterLookupMixin):
             setattr(cls, 'get_%s_display' % self.name,
                     curry(cls._get_FIELD_display, field=self))
 
+    def get_filter_kwargs_for_object(self, obj):
+        """
+        Return a dict that when passed as kwargs to self.model.filter(), would
+        yield all instances having the same value for this field as obj has.
+        """
+        return {self.name: getattr(obj, self.attname)}
+
     def get_attname(self):
         return self.name
 
@@ -824,14 +837,10 @@ class Field(RegisterLookupMixin):
     def get_choices_default(self):
         return self.get_choices()
 
-    def get_flatchoices(self, include_blank=True,
-                        blank_choice=BLANK_CHOICE_DASH):
-        """
-        Returns flattened choices with a default blank choice included.
-        """
-        first_choice = blank_choice if include_blank else []
-        return first_choice + list(self.flatchoices)
-
+    @warn_about_renamed_method(
+        'Field', '_get_val_from_obj', 'value_from_object',
+        RemovedInDjango20Warning
+    )
     def _get_val_from_obj(self, obj):
         if obj is not None:
             return getattr(obj, self.attname)
@@ -843,7 +852,7 @@ class Field(RegisterLookupMixin):
         Returns a string value of this field from the passed obj.
         This is used by the serialization framework.
         """
-        return smart_text(self._get_val_from_obj(obj))
+        return smart_text(self.value_from_object(obj))
 
     def _get_flatchoices(self):
         """Flattened version of choices tuple."""
@@ -1115,7 +1124,6 @@ class CharField(Field):
         return super(CharField, self).formfield(**defaults)
 
 
-# TODO: Maybe move this into contrib, because it's specialized.
 class CommaSeparatedIntegerField(CharField):
     default_validators = [validators.validate_comma_separated_integer_list]
     description = _("Comma-separated integers")
@@ -1298,7 +1306,7 @@ class DateField(DateTimeCheckMixin, Field):
         return connection.ops.adapt_datefield_value(value)
 
     def value_to_string(self, obj):
-        val = self._get_val_from_obj(obj)
+        val = self.value_from_object(obj)
         return '' if val is None else val.isoformat()
 
     def formfield(self, **kwargs):
@@ -1458,7 +1466,7 @@ class DateTimeField(DateField):
         return connection.ops.adapt_datetimefield_value(value)
 
     def value_to_string(self, obj):
-        val = self._get_val_from_obj(obj)
+        val = self.value_from_object(obj)
         return '' if val is None else val.isoformat()
 
     def formfield(self, **kwargs):
@@ -1680,7 +1688,7 @@ class DurationField(Field):
         return converters + super(DurationField, self).get_db_converters(connection)
 
     def value_to_string(self, obj):
-        val = self._get_val_from_obj(obj)
+        val = self.value_from_object(obj)
         return '' if val is None else duration_string(val)
 
     def formfield(self, **kwargs):
@@ -2111,6 +2119,9 @@ class SlugField(CharField):
         # Set db_index=True unless it's been set manually.
         if 'db_index' not in kwargs:
             kwargs['db_index'] = True
+        self.allow_unicode = kwargs.pop('allow_unicode', False)
+        if self.allow_unicode:
+            self.default_validators = [validators.validate_unicode_slug]
         super(SlugField, self).__init__(*args, **kwargs)
 
     def deconstruct(self):
@@ -2121,13 +2132,15 @@ class SlugField(CharField):
             kwargs['db_index'] = False
         else:
             del kwargs['db_index']
+        if self.allow_unicode is not False:
+            kwargs['allow_unicode'] = self.allow_unicode
         return name, path, args, kwargs
 
     def get_internal_type(self):
         return "SlugField"
 
     def formfield(self, **kwargs):
-        defaults = {'form_class': forms.SlugField}
+        defaults = {'form_class': forms.SlugField, 'allow_unicode': self.allow_unicode}
         defaults.update(kwargs)
         return super(SlugField, self).formfield(**defaults)
 
@@ -2288,7 +2301,7 @@ class TimeField(DateTimeCheckMixin, Field):
         return connection.ops.adapt_timefield_value(value)
 
     def value_to_string(self, obj):
-        val = self._get_val_from_obj(obj)
+        val = self.value_from_object(obj)
         return '' if val is None else val.isoformat()
 
     def formfield(self, **kwargs):
@@ -2355,7 +2368,7 @@ class BinaryField(Field):
 
     def value_to_string(self, obj):
         """Binary data is serialized as base64"""
-        return b64encode(force_bytes(self._get_val_from_obj(obj))).decode('ascii')
+        return b64encode(force_bytes(self.value_from_object(obj))).decode('ascii')
 
     def to_python(self, value):
         # If it's a string, it should be base64-encoded data
