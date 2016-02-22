@@ -107,7 +107,7 @@ class ModelAdminTests(TestCase):
         self.assertTrue(ma.lookup_allowed('name__nonexistent', 'test_value'))
 
     def test_field_arguments(self):
-        # If we specify the fields argument, fieldsets_add and fielsets_change should
+        # If we specify the fields argument, fieldsets_add and fieldsets_change should
         # just stick the fields into a formsets structure and return it.
         class BandAdmin(ModelAdmin):
             fields = ['name']
@@ -572,7 +572,8 @@ class CheckTestCase(SimpleTestCase):
     def assertIsInvalid(self, model_admin, model, msg,
             id=None, hint=None, invalid_obj=None):
         invalid_obj = invalid_obj or model_admin
-        errors = model_admin.check(model=model)
+        admin_obj = model_admin(model, AdminSite())
+        errors = admin_obj.check()
         expected = [
             Error(
                 msg,
@@ -589,7 +590,8 @@ class CheckTestCase(SimpleTestCase):
         Same as assertIsInvalid but treats the given msg as a regexp.
         """
         invalid_obj = invalid_obj or model_admin
-        errors = model_admin.check(model=model)
+        admin_obj = model_admin(model, AdminSite())
+        errors = admin_obj.check()
         self.assertEqual(len(errors), 1)
         error = errors[0]
         self.assertEqual(error.hint, hint)
@@ -598,7 +600,8 @@ class CheckTestCase(SimpleTestCase):
         six.assertRegex(self, error.msg, msg)
 
     def assertIsValid(self, model_admin, model):
-        errors = model_admin.check(model=model)
+        admin_obj = model_admin(model, AdminSite())
+        errors = admin_obj.check()
         expected = []
         self.assertEqual(errors, expected)
 
@@ -1026,9 +1029,11 @@ class ListDisplayLinksCheckTests(CheckTestCase):
             list_display_links = ('non_existent_field',)
 
         self.assertIsInvalid(
-            ValidationTestModelAdmin, ValidationTestModel,
-            "The value of 'list_display_links[0]' refers to 'non_existent_field', which is not defined in 'list_display'.",
-            'admin.E111')
+            ValidationTestModelAdmin, ValidationTestModel, (
+                "The value of 'list_display_links[0]' refers to "
+                "'non_existent_field', which is not defined in 'list_display'."
+            ), 'admin.E111'
+        )
 
     def test_missing_in_list_display(self):
         class ValidationTestModelAdmin(ModelAdmin):
@@ -1234,16 +1239,17 @@ class OrderingCheckTests(CheckTestCase):
         self.assertIsInvalid(
             ValidationTestModelAdmin, ValidationTestModel,
             "The value of 'ordering' must be a list or tuple.",
-            'admin.E031')
+            'admin.E031'
+        )
 
         class ValidationTestModelAdmin(ModelAdmin):
             ordering = ('non_existent_field',)
 
         self.assertIsInvalid(
-            ValidationTestModelAdmin,
-            ValidationTestModel,
-            "The value of 'ordering[0]' refers to 'non_existent_field', which is not an attribute of 'modeladmin.ValidationTestModel'.",
-            'admin.E033',
+            ValidationTestModelAdmin, ValidationTestModel,
+            "The value of 'ordering[0]' refers to 'non_existent_field', "
+            "which is not an attribute of 'modeladmin.ValidationTestModel'.",
+            'admin.E033'
         )
 
     def test_random_marker_not_alone(self):
@@ -1252,10 +1258,11 @@ class OrderingCheckTests(CheckTestCase):
 
         self.assertIsInvalid(
             ValidationTestModelAdmin, ValidationTestModel,
-            ("The value of 'ordering' has the random ordering marker '?', but contains "
-             "other fields as well."),
+            "The value of 'ordering' has the random ordering marker '?', but contains "
+            "other fields as well.",
             'admin.E032',
-            hint='Either remove the "?", or remove the other fields.')
+            hint='Either remove the "?", or remove the other fields.'
+        )
 
     def test_valid_random_marker_case(self):
         class ValidationTestModelAdmin(ModelAdmin):
@@ -1282,7 +1289,8 @@ class ListSelectRelatedCheckTests(CheckTestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_select_related = 1
 
-        self.assertIsInvalid(ValidationTestModelAdmin, ValidationTestModel,
+        self.assertIsInvalid(
+            ValidationTestModelAdmin, ValidationTestModel,
             "The value of 'list_select_related' must be a boolean, tuple or list.",
             'admin.E117')
 

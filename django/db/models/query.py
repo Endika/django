@@ -115,7 +115,7 @@ class ValuesIterable(BaseIterable):
 
 class ValuesListIterable(BaseIterable):
     """
-    Iterable returned by QuerySet.values_lists(flat=False)
+    Iterable returned by QuerySet.values_list(flat=False)
     that yields a tuple for each row.
     """
 
@@ -148,7 +148,7 @@ class ValuesListIterable(BaseIterable):
 
 class FlatValuesListIterable(BaseIterable):
     """
-    Iterable returned by QuerySet.values_lists(flat=True) that
+    Iterable returned by QuerySet.values_list(flat=True) that
     yields single values.
     """
 
@@ -234,7 +234,7 @@ class QuerySet(object):
         data = list(self[:REPR_OUTPUT_SIZE + 1])
         if len(data) > REPR_OUTPUT_SIZE:
             data[-1] = "...(remaining elements truncated)..."
-        return repr(data)
+        return '<QuerySet %r>' % data
 
     def __len__(self):
         self._fetch_all()
@@ -458,6 +458,8 @@ class QuerySet(object):
         specifying whether an object was created.
         """
         lookup, params = self._extract_model_params(defaults, **kwargs)
+        # The get() needs to be targeted at the write database in order
+        # to avoid potential transaction consistency problems.
         self._for_write = True
         try:
             return self.get(**lookup), False
@@ -482,9 +484,7 @@ class QuerySet(object):
                 return obj, created
         for k, v in six.iteritems(defaults):
             setattr(obj, k, v)
-
-        with transaction.atomic(using=self.db, savepoint=False):
-            obj.save(using=self.db)
+        obj.save(using=self.db)
         return obj, False
 
     def _create_object_from_params(self, lookup, params):
@@ -559,16 +559,19 @@ class QuerySet(object):
             return objects[0]
         return None
 
-    def in_bulk(self, id_list):
+    def in_bulk(self, id_list=None):
         """
         Returns a dictionary mapping each of the given IDs to the object with
-        that ID.
+        that ID. If `id_list` isn't provided, the entire QuerySet is evaluated.
         """
         assert self.query.can_filter(), \
             "Cannot use 'limit' or 'offset' with in_bulk"
-        if not id_list:
-            return {}
-        qs = self.filter(pk__in=id_list).order_by()
+        if id_list is not None:
+            if not id_list:
+                return {}
+            qs = self.filter(pk__in=id_list).order_by()
+        else:
+            qs = self._clone()
         return {obj._get_pk_val(): obj for obj in qs}
 
     def delete(self):
@@ -1105,12 +1108,18 @@ class QuerySet(object):
         for field, objects in other._known_related_objects.items():
             self._known_related_objects.setdefault(field, {}).update(objects)
 
-    def _prepare(self):
+    def _prepare(self, field):
         if self._fields is not None:
             # values() queryset can only be used as nested queries
             # if they are set up to select only a single field.
             if len(self._fields or self.model._meta.concrete_fields) > 1:
                 raise TypeError('Cannot use multi-field values as a filter value.')
+        else:
+            # If the query is used as a subquery for a ForeignKey with non-pk
+            # target field, make sure to select the target field in the subquery.
+            foreign_fields = getattr(field, 'foreign_related_fields', ())
+            if len(foreign_fields) == 1 and not foreign_fields[0].primary_key:
+                return self.values(foreign_fields[0].name)
         return self
 
     def _as_sql(self, connection):
@@ -1168,7 +1177,7 @@ class QuerySet(object):
 
 class InstanceCheckMeta(type):
     def __instancecheck__(self, instance):
-        return instance.query.is_empty()
+        return isinstance(instance, QuerySet) and instance.query.is_empty()
 
 
 class EmptyQuerySet(six.with_metaclass(InstanceCheckMeta)):
@@ -1518,6 +1527,7 @@ def get_prefetcher(instance, attr):
                 rel_obj = getattr(instance, attr)
                 if hasattr(rel_obj, 'get_prefetch_queryset'):
                     prefetcher = rel_obj
+                is_fetched = attr in instance._prefetched_objects_cache
     return prefetcher, rel_obj_descriptor, attr_found, is_fetched
 
 
@@ -1569,10 +1579,24 @@ def prefetch_one_level(instances, prefetcher, lookup, level):
         rel_attr_val = rel_obj_attr(rel_obj)
         rel_obj_cache.setdefault(rel_attr_val, []).append(rel_obj)
 
+    to_attr, as_attr = lookup.get_current_to_attr(level)
+    # Make sure `to_attr` does not conflict with a field.
+    if as_attr and instances:
+        # We assume that objects retrieved are homogeneous (which is the premise
+        # of prefetch_related), so what applies to first object applies to all.
+        model = instances[0].__class__
+        try:
+            model._meta.get_field(to_attr)
+        except exceptions.FieldDoesNotExist:
+            pass
+        else:
+            msg = 'to_attr={} conflicts with a field on the {} model.'
+            raise ValueError(msg.format(to_attr, model.__name__))
+
     for obj in instances:
         instance_attr_val = instance_attr(obj)
         vals = rel_obj_cache.get(instance_attr_val, [])
-        to_attr, as_attr = lookup.get_current_to_attr(level)
+
         if single:
             val = vals[0] if vals else None
             to_attr = to_attr if as_attr else cache_name
@@ -1580,6 +1604,7 @@ def prefetch_one_level(instances, prefetcher, lookup, level):
         else:
             if as_attr:
                 setattr(obj, to_attr, vals)
+                obj._prefetched_objects_cache[cache_name] = vals
             else:
                 # Cache in the QuerySet.all().
                 qs = getattr(obj, to_attr).all()

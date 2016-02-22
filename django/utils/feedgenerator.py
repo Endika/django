@@ -91,7 +91,8 @@ class SyndicationFeed(object):
     def __init__(self, title, link, description, language=None, author_email=None,
             author_name=None, author_link=None, subtitle=None, categories=None,
             feed_url=None, feed_copyright=None, feed_guid=None, ttl=None, **kwargs):
-        to_unicode = lambda s: force_text(s, strings_only=True)
+        def to_unicode(s):
+            return force_text(s, strings_only=True)
         if categories:
             categories = [force_text(c) for c in categories]
         if ttl is not None:
@@ -118,18 +119,31 @@ class SyndicationFeed(object):
     def add_item(self, title, link, description, author_email=None,
             author_name=None, author_link=None, pubdate=None, comments=None,
             unique_id=None, unique_id_is_permalink=None, enclosure=None,
-            categories=(), item_copyright=None, ttl=None, updateddate=None, **kwargs):
+            categories=(), item_copyright=None, ttl=None, updateddate=None,
+            enclosures=None, **kwargs):
         """
         Adds an item to the feed. All args are expected to be Python Unicode
         objects except pubdate and updateddate, which are datetime.datetime
-        objects, and enclosure, which is an instance of the Enclosure class.
+        objects, and enclosures, which is an iterable of instances of the
+        Enclosure class.
         """
-        to_unicode = lambda s: force_text(s, strings_only=True)
+        def to_unicode(s):
+            return force_text(s, strings_only=True)
         if categories:
             categories = [to_unicode(c) for c in categories]
         if ttl is not None:
             # Force ints to unicode
             ttl = force_text(ttl)
+        if enclosure is None:
+            enclosures = [] if enclosures is None else enclosures
+        else:
+            warnings.warn(
+                "The enclosure keyword argument is deprecated, "
+                "use enclosures instead.",
+                RemovedInDjango20Warning,
+                stacklevel=2,
+            )
+            enclosures = [enclosure]
         item = {
             'title': to_unicode(title),
             'link': iri_to_uri(link),
@@ -142,7 +156,7 @@ class SyndicationFeed(object):
             'comments': to_unicode(comments),
             'unique_id': to_unicode(unique_id),
             'unique_id_is_permalink': unique_id_is_permalink,
-            'enclosure': enclosure,
+            'enclosures': enclosures,
             'categories': categories or (),
             'item_copyright': to_unicode(item_copyright),
             'ttl': ttl,
@@ -317,10 +331,19 @@ class Rss201rev2Feed(RssFeed):
             handler.addQuickElement("ttl", item['ttl'])
 
         # Enclosure.
-        if item['enclosure'] is not None:
-            handler.addQuickElement("enclosure", '',
-                {"url": item['enclosure'].url, "length": item['enclosure'].length,
-                    "type": item['enclosure'].mime_type})
+        if item['enclosures']:
+            enclosures = list(item['enclosures'])
+            if len(enclosures) > 1:
+                raise ValueError(
+                    "RSS feed items may only have one enclosure, see "
+                    "http://www.rssboard.org/rss-profile#element-channel-item-enclosure"
+                )
+            enclosure = enclosures[0]
+            handler.addQuickElement('enclosure', '', {
+                'url': enclosure.url,
+                'length': enclosure.length,
+                'type': enclosure.mime_type,
+            })
 
         # Categories.
         for cat in item['categories']:
@@ -328,7 +351,7 @@ class Rss201rev2Feed(RssFeed):
 
 
 class Atom1Feed(SyndicationFeed):
-    # Spec: http://atompub.org/2005/07/11/draft-ietf-atompub-format-10.html
+    # Spec: https://tools.ietf.org/html/rfc4287
     content_type = 'application/atom+xml; charset=utf-8'
     ns = "http://www.w3.org/2005/Atom"
 
@@ -405,13 +428,14 @@ class Atom1Feed(SyndicationFeed):
         if item['description'] is not None:
             handler.addQuickElement("summary", item['description'], {"type": "html"})
 
-        # Enclosure.
-        if item['enclosure'] is not None:
-            handler.addQuickElement("link", '',
-                {"rel": "enclosure",
-                 "href": item['enclosure'].url,
-                 "length": item['enclosure'].length,
-                 "type": item['enclosure'].mime_type})
+        # Enclosures.
+        for enclosure in item['enclosures']:
+            handler.addQuickElement('link', '', {
+                'rel': 'enclosure',
+                'href': enclosure.url,
+                'length': enclosure.length,
+                'type': enclosure.mime_type,
+            })
 
         # Categories.
         for cat in item['categories']:

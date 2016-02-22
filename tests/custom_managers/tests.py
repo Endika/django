@@ -76,6 +76,10 @@ class CustomManagerTests(TestCase):
             self.assertEqual(list(queryset), [six.text_type("Bugs")])
             self.assertEqual(queryset._filter_CustomQuerySet, True)
 
+            self.assertIsInstance(queryset.values(), CustomQuerySet)
+            self.assertIsInstance(queryset.values().values(), CustomQuerySet)
+            self.assertIsInstance(queryset.values_list().values(), CustomQuerySet)
+
     def test_init_args(self):
         """
         The custom manager __init__() argument has been set.
@@ -111,7 +115,8 @@ class CustomManagerTests(TestCase):
         The default manager, "objects", doesn't exist, because a custom one
         was provided.
         """
-        self.assertRaises(AttributeError, lambda: Book.objects)
+        with self.assertRaises(AttributeError):
+            Book.objects
 
     def test_filtering(self):
         """

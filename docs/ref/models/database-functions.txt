@@ -5,8 +5,6 @@ Database Functions
 .. module:: django.db.models.functions
     :synopsis: Database Functions
 
-.. versionadded:: 1.8
-
 The classes documented below provide a way for users to use functions provided
 by the underlying database as annotations, aggregations, or filters in Django.
 Functions are also :doc:`expressions <expressions>`, so they can be used and
@@ -25,8 +23,8 @@ We don't usually recommend allowing ``null=True`` for ``CharField`` since this
 allows the field to have two "empty values", but it's important for the
 ``Coalesce`` example below.
 
-Coalesce
---------
+``Coalesce``
+============
 
 .. class:: Coalesce(*expressions, **extra)
 
@@ -66,8 +64,8 @@ Usage examples::
     >>> now_sql = RawSQL("cast(%s as datetime)", (now,))
     >>> Coalesce('updated', now_sql)
 
-Concat
-------
+``Concat``
+==========
 
 .. class:: Concat(*expressions, **extra)
 
@@ -93,8 +91,8 @@ Usage example::
     >>> print(author.screen_name)
     Margaret Smith (Maggie)
 
-Greatest
---------
+``Greatest``
+============
 
 .. class:: Greatest(*expressions, **extra)
 
@@ -137,8 +135,8 @@ and ``comment.modified``.
     The PostgreSQL behavior can be emulated using ``Coalesce`` if you know
     a sensible minimum value to provide as a default.
 
-Least
------
+``Least``
+=========
 
 .. class:: Least(*expressions, **extra)
 
@@ -161,8 +159,8 @@ will result in a database error.
     The PostgreSQL behavior can be emulated using ``Coalesce`` if you know
     a sensible maximum value to provide as a default.
 
-Length
-------
+``Length``
+==========
 
 .. class:: Length(expression, **extra)
 
@@ -180,13 +178,27 @@ Usage example::
     >>> print(author.name_length, author.goes_by_length)
     (14, None)
 
-Lower
-------
+It can also be registered as a transform. For example::
+
+    >>> from django.db.models import CharField
+    >>> from django.db.models.functions import Length
+    >>> CharField.register_lookup(Length, 'length')
+    >>> # Get authors whose name is longer than 7 characters
+    >>> authors = Author.objects.filter(name__length__gt=7)
+
+.. versionchanged:: 1.9
+
+    The ability to register the function as a transform was added.
+
+``Lower``
+=========
 
 .. class:: Lower(expression, **extra)
 
 Accepts a single text field or expression and returns the lowercase
 representation.
+
+It can also be registered as a transform as described in :class:`Length`.
 
 Usage example::
 
@@ -196,8 +208,12 @@ Usage example::
     >>> print(author.name_lower)
     margaret smith
 
-Now
----
+.. versionchanged:: 1.9
+
+    The ability to register the function as a transform was added.
+
+``Now``
+=======
 
 .. class:: Now()
 
@@ -210,7 +226,7 @@ Usage example::
 
     >>> from django.db.models.functions import Now
     >>> Article.objects.filter(published__lte=Now())
-    [<Article: How to Django>]
+    <QuerySet [<Article: How to Django>]>
 
 .. admonition:: PostgreSQL considerations
 
@@ -219,8 +235,8 @@ Usage example::
     ``Now()`` uses ``STATEMENT_TIMESTAMP`` instead. If you need the transaction
     timestamp, use :class:`django.contrib.postgres.functions.TransactionNow`.
 
-Substr
-------
+``Substr``
+==========
 
 .. class:: Substr(expression, pos, length=None, **extra)
 
@@ -238,13 +254,15 @@ Usage example::
     >>> print(Author.objects.get(name='Margaret Smith').alias)
     marga
 
-Upper
-------
+``Upper``
+=========
 
 .. class:: Upper(expression, **extra)
 
 Accepts a single text field or expression and returns the uppercase
 representation.
+
+It can also be registered as a transform as described in :class:`Length`.
 
 Usage example::
 
@@ -253,3 +271,7 @@ Usage example::
     >>> author = Author.objects.annotate(name_upper=Upper('name')).get()
     >>> print(author.name_upper)
     MARGARET SMITH
+
+.. versionchanged:: 1.9
+
+    The ability to register the function as a transform was added.

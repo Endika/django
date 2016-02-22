@@ -47,7 +47,10 @@ class GraphTests(SimpleTestCase):
         # Test whole graph
         self.assertEqual(
             graph.forwards_plan(("app_a", "0004")),
-            [('app_b', '0001'), ('app_b', '0002'), ('app_a', '0001'), ('app_a', '0002'), ('app_a', '0003'), ('app_a', '0004')],
+            [
+                ('app_b', '0001'), ('app_b', '0002'), ('app_a', '0001'),
+                ('app_a', '0002'), ('app_a', '0003'), ('app_a', '0004'),
+            ],
         )
         # Test reverse to b:0002
         self.assertEqual(
@@ -101,12 +104,19 @@ class GraphTests(SimpleTestCase):
         # Test whole graph
         self.assertEqual(
             graph.forwards_plan(("app_a", "0004")),
-            [('app_b', '0001'), ('app_c', '0001'), ('app_a', '0001'), ('app_a', '0002'), ('app_c', '0002'), ('app_b', '0002'), ('app_a', '0003'), ('app_a', '0004')],
+            [
+                ('app_b', '0001'), ('app_c', '0001'), ('app_a', '0001'),
+                ('app_a', '0002'), ('app_c', '0002'), ('app_b', '0002'),
+                ('app_a', '0003'), ('app_a', '0004'),
+            ],
         )
         # Test reverse to b:0001
         self.assertEqual(
             graph.backwards_plan(("app_b", "0001")),
-            [('app_a', '0004'), ('app_c', '0002'), ('app_c', '0001'), ('app_a', '0003'), ('app_b', '0002'), ('app_b', '0001')],
+            [
+                ('app_a', '0004'), ('app_c', '0002'), ('app_c', '0001'),
+                ('app_a', '0003'), ('app_b', '0002'), ('app_b', '0001'),
+            ],
         )
         # Test roots and leaves
         self.assertEqual(
@@ -135,10 +145,8 @@ class GraphTests(SimpleTestCase):
         graph.add_dependency("app_b.0002", ("app_b", "0002"), ("app_b", "0001"))
         graph.add_dependency("app_b.0001", ("app_b", "0001"), ("app_a", "0003"))
         # Test whole graph
-        self.assertRaises(
-            CircularDependencyError,
-            graph.forwards_plan, ("app_a", "0003"),
-        )
+        with self.assertRaises(CircularDependencyError):
+            graph.forwards_plan(("app_a", "0003"), )
 
     def test_circular_graph_2(self):
         graph = MigrationGraph()
@@ -149,10 +157,8 @@ class GraphTests(SimpleTestCase):
         graph.add_dependency('B.0001', ('B', '0001'), ('A', '0001'))
         graph.add_dependency('C.0001', ('C', '0001'), ('B', '0001'))
 
-        self.assertRaises(
-            CircularDependencyError,
-            graph.forwards_plan, ('C', '0001')
-        )
+        with self.assertRaises(CircularDependencyError):
+            graph.forwards_plan(('C', '0001'))
 
     def test_graph_recursive(self):
         graph = MigrationGraph()
@@ -187,6 +193,7 @@ class GraphTests(SimpleTestCase):
         leaf = expected[-1]
 
         with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always', RuntimeWarning)
             forwards_plan = graph.forwards_plan(leaf)
 
         self.assertEqual(len(w), 1)
@@ -195,6 +202,7 @@ class GraphTests(SimpleTestCase):
         self.assertEqual(expected, forwards_plan)
 
         with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always', RuntimeWarning)
             backwards_plan = graph.backwards_plan(root)
 
         self.assertEqual(len(w), 1)

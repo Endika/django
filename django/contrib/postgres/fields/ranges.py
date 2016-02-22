@@ -51,8 +51,12 @@ class RangeField(models.Field):
         base_field = self.base_field
         result = {"bounds": value._bounds}
         for end in ('lower', 'upper'):
-            obj = AttributeSetter(base_field.attname, getattr(value, end))
-            result[end] = base_field.value_to_string(obj)
+            val = getattr(value, end)
+            if val is None:
+                result[end] = None
+            else:
+                obj = AttributeSetter(base_field.attname, val)
+                result[end] = base_field.value_to_string(obj)
         return json.dumps(result)
 
     def formfield(self, **kwargs):
@@ -173,7 +177,7 @@ class AdjacentToLookup(lookups.PostgresSimpleLookup):
 
 
 @RangeField.register_lookup
-class RangeStartsWith(lookups.FunctionTransform):
+class RangeStartsWith(models.Transform):
     lookup_name = 'startswith'
     function = 'lower'
 
@@ -183,7 +187,7 @@ class RangeStartsWith(lookups.FunctionTransform):
 
 
 @RangeField.register_lookup
-class RangeEndsWith(lookups.FunctionTransform):
+class RangeEndsWith(models.Transform):
     lookup_name = 'endswith'
     function = 'upper'
 
@@ -193,7 +197,7 @@ class RangeEndsWith(lookups.FunctionTransform):
 
 
 @RangeField.register_lookup
-class IsEmpty(lookups.FunctionTransform):
+class IsEmpty(models.Transform):
     lookup_name = 'isempty'
     function = 'isempty'
     output_field = models.BooleanField()

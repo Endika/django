@@ -35,8 +35,8 @@ Measurement         Relationships             Operations              Editors   
                                                                       :class:`Translate`
 ==================  =======================   ======================  ===================  ==================  =====================
 
-Area
-----
+``Area``
+========
 
 .. class:: Area(expression, **extra)
 
@@ -47,15 +47,17 @@ field as an :class:`~django.contrib.gis.measure.Area` measure. On MySQL, a raw
 float value is returned, as it's not possible to automatically determine the
 unit of the field.
 
-AsGeoJSON
----------
+``AsGeoJSON``
+=============
 
 .. class:: AsGeoJSON(expression, bbox=False, crs=False, precision=8, **extra)
 
 *Availability*: PostGIS, SpatiaLite
 
 Accepts a single geographic field or expression and returns a `GeoJSON
-<http://geojson.org/>`_ representation of the geometry.
+<http://geojson.org/>`_ representation of the geometry. Note that the result is
+not a complete GeoJSON structure but only the ``geometry`` key content of a
+GeoJSON structure. See also :doc:`/ref/contrib/gis/serializers`.
 
 Example::
 
@@ -77,8 +79,8 @@ Keyword Argument       Description
                        representation -- the default value is 8.
 =====================  =====================================================
 
-AsGML
------
+``AsGML``
+=========
 
 .. class:: AsGML(expression, version=2, precision=8, **extra)
 
@@ -108,8 +110,8 @@ Keyword Argument       Description
 
 __ https://en.wikipedia.org/wiki/Geography_Markup_Language
 
-AsKML
------
+``AsKML``
+=========
 
 .. class:: AsKML(expression, precision=8, **extra)
 
@@ -135,8 +137,8 @@ Keyword Argument       Description
 
 __ https://developers.google.com/kml/documentation/
 
-AsSVG
------
+``AsSVG``
+=========
 
 .. class:: AsSVG(expression, relative=False, precision=8, **extra)
 
@@ -159,8 +161,8 @@ Keyword Argument       Description
 
 __ http://www.w3.org/Graphics/SVG/
 
-BoundingCircle
---------------
+``BoundingCircle``
+==================
 
 .. class:: BoundingCircle(expression, num_seg=48, **extra)
 
@@ -169,33 +171,37 @@ BoundingCircle
 Accepts a single geographic field or expression and returns the smallest circle
 polygon that can fully contain the geometry.
 
-Centroid
---------
+``Centroid``
+============
 
 .. class:: Centroid(expression, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL, PostGIS, Oracle, SpatiaLite
 
 Accepts a single geographic field or expression and returns the ``centroid``
 value of the geometry.
 
-Difference
-----------
+``Difference``
+==============
 
 .. class:: Difference(expr1, expr2, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL (≥ 5.6.1), PostGIS, Oracle, SpatiaLite
 
 Accepts two geographic fields or expressions and returns the geometric
 difference, that is the part of geometry A that does not intersect with
 geometry B.
 
-Distance
---------
+.. versionchanged:: 1.10
+
+    MySQL support was added.
+
+``Distance``
+============
 
 .. class:: Distance(expr1, expr2, spheroid=None, **extra)
 
-*Availability*: MySQL, PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL (≥ 5.6.1), PostGIS, Oracle, SpatiaLite
 
 Accepts two geographic fields or expressions and returns the distance between
 them, as a :class:`~django.contrib.gis.measure.Distance` object. On MySQL, a raw
@@ -234,18 +240,18 @@ queryset is calculated::
     in kilometers. See :doc:`measure` for usage details and the list of
     :ref:`supported_units`.
 
-Envelope
---------
+``Envelope``
+============
 
 .. class:: Envelope(expression, **extra)
 
-*Availability*: PostGIS, SpatiaLite
+*Availability*: MySQL, PostGIS, SpatiaLite
 
 Accepts a single geographic field or expression and returns the geometry
 representing the bounding box of the geometry.
 
-ForceRHR
---------
+``ForceRHR``
+============
 
 .. class:: ForceRHR(expression, **extra)
 
@@ -255,30 +261,38 @@ Accepts a single geographic field or expression and returns a modified version
 of the polygon/multipolygon in which all of the vertices follow the
 right-hand rule.
 
-GeoHash
--------
+``GeoHash``
+===========
 
 .. class:: GeoHash(expression, **extra)
 
-*Availability*: PostGIS
+*Availability*: PostGIS, SpatiaLite (≥ 4.0, LWGEOM)
 
 Accepts a single geographic field or expression and returns a `GeoHash`__
 representation of the geometry.
 
+.. versionchanged:: 1.10
+
+    SpatiaLite support was added.
+
 __ https://en.wikipedia.org/wiki/Geohash
 
-Intersection
-------------
+``Intersection``
+================
 
 .. class:: Intersection(expr1, expr2, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL (≥ 5.6.1), PostGIS, Oracle, SpatiaLite
 
 Accepts two geographic fields or expressions and returns the geometric
 intersection between them.
 
-Length
-------
+.. versionchanged:: 1.10
+
+    MySQL support was added.
+
+``Length``
+==========
 
 .. class:: Length(expression, spheroid=True, **extra)
 
@@ -294,8 +308,8 @@ specify if the calculation should be based on a simple sphere (less
 accurate, less resource-intensive) or on a spheroid (more accurate, more
 resource-intensive) with the ``spheroid`` keyword argument.
 
-MemSize
--------
+``MemSize``
+===========
 
 .. class:: MemSize(expression, **extra)
 
@@ -304,41 +318,41 @@ MemSize
 Accepts a single geographic field or expression and returns the memory size
 (number of bytes) that the geometry field takes.
 
-NumGeometries
--------------
+``NumGeometries``
+=================
 
 .. class:: NumGeometries(expression, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL, PostGIS, Oracle, SpatiaLite
 
 Accepts a single geographic field or expression and returns the number of
 geometries if the geometry field is a collection (e.g., a ``GEOMETRYCOLLECTION``
 or ``MULTI*`` field); otherwise returns ``None``.
 
-NumPoints
----------
+``NumPoints``
+=============
 
 .. class:: NumPoints(expression, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL, PostGIS, Oracle, SpatiaLite
 
 Accepts a single geographic field or expression and returns the number of points
 in the first linestring in the geometry field; otherwise returns ``None``.
 
-Perimeter
----------
+``Perimeter``
+=============
 
 .. class:: Perimeter(expression, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: PostGIS, Oracle, SpatiaLite (≥ 4.0)
 
 Accepts a single geographic field or expression and returns the perimeter of the
 geometry field as a :class:`~django.contrib.gis.measure.Distance` object. On
 MySQL, a raw float value is returned, as it's not possible to automatically
 determine the unit of the field.
 
-PointOnSurface
---------------
+``PointOnSurface``
+==================
 
 .. class:: PointOnSurface(expression, **extra)
 
@@ -347,8 +361,8 @@ PointOnSurface
 Accepts a single geographic field or expression and returns a ``Point`` geometry
 guaranteed to lie on the surface of the field; otherwise returns ``None``.
 
-Reverse
--------
+``Reverse``
+===========
 
 .. class:: Reverse(expression, **extra)
 
@@ -357,8 +371,8 @@ Reverse
 Accepts a single geographic field or expression and returns a geometry with
 reversed coordinates.
 
-Scale
------
+``Scale``
+=========
 
 .. class:: Scale(expression, x, y, z=0.0, **extra)
 
@@ -368,12 +382,12 @@ Accepts a single geographic field or expression and returns a geometry with
 scaled coordinates by multiplying them with the ``x``, ``y``, and optionally
 ``z`` parameters.
 
-SnapToGrid
-----------
+``SnapToGrid``
+==============
 
 .. class:: SnapToGrid(expression, *args, **extra)
 
-*Availability*: PostGIS, SpatiaLite
+*Availability*: PostGIS, SpatiaLite (≥ 3.1)
 
 Accepts a single geographic field or expression and returns a geometry with all
 points snapped to the given grid.  How the geometry is snapped to the grid
@@ -388,19 +402,23 @@ Number of Arguments  Description
 4                    X, Y sizes and the corresponding X, Y origins.
 ===================  =====================================================
 
-SymDifference
--------------
+``SymDifference``
+=================
 
 .. class:: SymDifference(expr1, expr2, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL (≥ 5.6.1), PostGIS, Oracle, SpatiaLite
 
 Accepts two geographic fields or expressions and returns the geometric
 symmetric difference (union without the intersection) between the given
 parameters.
 
-Transform
----------
+.. versionchanged:: 1.10
+
+    MySQL support was added.
+
+``Transform``
+=============
 
 .. class:: Transform(expression, srid, **extra)
 
@@ -416,8 +434,8 @@ the transformed geometry to the spatial reference system specified by the
     the spatial database used.  In other words, the SRID numbers used for Oracle
     are not necessarily the same as those used by PostGIS.
 
-Translate
----------
+``Translate``
+=============
 
 .. class:: Translate(expression, x, y, z=0.0, **extra)
 
@@ -427,12 +445,12 @@ Accepts a single geographic field or expression and returns a geometry with
 its coordinates offset by the ``x``, ``y``, and optionally ``z`` numeric
 parameters.
 
-Union
------
+``Union``
+=========
 
 .. class:: Union(expr1, expr2, **extra)
 
-*Availability*: PostGIS, Oracle, SpatiaLite
+*Availability*: MySQL (≥ 5.6.1), PostGIS, Oracle, SpatiaLite
 
 Accepts two geographic fields or expressions and returns the union of both
 geometries.

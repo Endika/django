@@ -22,6 +22,10 @@ class Country(NamedModel):
     mpoly = models.MultiPolygonField()  # SRID, by default, is 4326
 
 
+class CountryWebMercator(NamedModel):
+    mpoly = models.MultiPolygonField(srid=3857)
+
+
 class City(NamedModel):
     point = models.PointField()
 
@@ -60,6 +64,14 @@ class MultiFields(NamedModel):
     city = models.ForeignKey(City, models.CASCADE)
     point = models.PointField()
     poly = models.PolygonField()
+
+    class Meta:
+        required_db_features = ['gis_enabled']
+
+
+class UniqueTogetherModel(models.Model):
+    city = models.CharField(max_length=30)
+    point = models.PointField()
 
     class Meta:
         unique_together = ('city', 'point')

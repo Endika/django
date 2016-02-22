@@ -19,7 +19,7 @@ from django.db.models.fields import (
     TimeField, URLField,
 )
 from django.db.models.fields.files import FileField, ImageField
-from django.test.utils import requires_tz_support
+from django.test.utils import isolate_apps, requires_tz_support
 from django.utils import six, timezone
 from django.utils.encoding import force_str
 from django.utils.functional import lazy
@@ -98,8 +98,13 @@ class BasicFieldTests(test.TestCase):
         self.assertTrue(instance.id)
         # Set field to object on saved instance
         instance.size = instance
+        msg = (
+            "Tried to update field model_fields.FloatModel.size with a model "
+            "instance, <FloatModel: FloatModel object>. Use a value "
+            "compatible with FloatField."
+        )
         with transaction.atomic():
-            with self.assertRaises(TypeError):
+            with self.assertRaisesMessage(TypeError, msg):
                 instance.save()
         # Try setting field to object on retrieved object
         obj = FloatModel.objects.get(pk=instance.id)
@@ -124,7 +129,8 @@ class DecimalFieldTests(test.TestCase):
         f = models.DecimalField(max_digits=4, decimal_places=2)
         self.assertEqual(f.to_python(3), Decimal("3"))
         self.assertEqual(f.to_python("3.14"), Decimal("3.14"))
-        self.assertRaises(ValidationError, f.to_python, "abc")
+        with self.assertRaises(ValidationError):
+            f.to_python("abc")
 
     def test_default(self):
         f = models.DecimalField(default=Decimal("0.00"))
@@ -165,6 +171,24 @@ class DecimalFieldTests(test.TestCase):
         # This should not crash. That counts as a win for our purposes.
         Foo.objects.filter(d__gte=100000000000)
 
+    def test_max_digits_validation(self):
+        field = models.DecimalField(max_digits=2)
+        expected_message = validators.DecimalValidator.messages['max_digits'] % {'max': 2}
+        with self.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(100, None)
+
+    def test_max_decimal_places_validation(self):
+        field = models.DecimalField(decimal_places=1)
+        expected_message = validators.DecimalValidator.messages['max_decimal_places'] % {'max': 1}
+        with self.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(Decimal('0.99'), None)
+
+    def test_max_whole_digits_validation(self):
+        field = models.DecimalField(max_digits=3, decimal_places=1)
+        expected_message = validators.DecimalValidator.messages['max_whole_digits'] % {'max': 2}
+        with self.assertRaisesMessage(ValidationError, expected_message):
+            field.clean(Decimal('999'), None)
+
 
 class ForeignKeyTests(test.TestCase):
     def test_callable_default(self):
@@ -184,7 +208,11 @@ class ForeignKeyTests(test.TestCase):
         fk_model_empty = FkToChar.objects.select_related('out').get(id=fk_model_empty.pk)
         self.assertEqual(fk_model_empty.out, char_model_empty)
 
+    @isolate_apps('model_fields')
     def test_warning_when_unique_true_on_fk(self):
+        class Foo(models.Model):
+            pass
+
         class FKUniqueTrue(models.Model):
             fk_field = models.ForeignKey(Foo, models.CASCADE, unique=True)
 
@@ -224,6 +252,25 @@ class ForeignKeyTests(test.TestCase):
             "Pending lookup added for a foreign key on an abstract model"
         )
 
+    @isolate_apps('model_fields', 'model_fields.tests')
+    def test_abstract_model_app_relative_foreign_key(self):
+        class Refered(models.Model):
+            class Meta:
+                app_label = 'model_fields'
+
+        class AbstractReferent(models.Model):
+            reference = models.ForeignKey('Refered', on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = 'model_fields'
+                abstract = True
+
+        class ConcreteReferent(AbstractReferent):
+            class Meta:
+                app_label = 'tests'
+
+        self.assertEqual(ConcreteReferent._meta.get_field('reference').related_model, Refered)
+
 
 class ManyToManyFieldTests(test.SimpleTestCase):
     def test_abstract_model_pending_operations(self):
@@ -245,6 +292,30 @@ class ManyToManyFieldTests(test.SimpleTestCase):
             list(apps._pending_operations.items()),
             "Pending lookup added for a many-to-many field on an abstract model"
         )
+
+    @isolate_apps('model_fields', 'model_fields.tests')
+    def test_abstract_model_app_relative_foreign_key(self):
+        class Refered(models.Model):
+            class Meta:
+                app_label = 'model_fields'
+
+        class Through(models.Model):
+            refered = models.ForeignKey('Refered', on_delete=models.CASCADE)
+            referent = models.ForeignKey('tests.ConcreteReferent', on_delete=models.CASCADE)
+
+        class AbstractReferent(models.Model):
+            reference = models.ManyToManyField('Refered', through='Through')
+
+            class Meta:
+                app_label = 'model_fields'
+                abstract = True
+
+        class ConcreteReferent(AbstractReferent):
+            class Meta:
+                app_label = 'tests'
+
+        self.assertEqual(ConcreteReferent._meta.get_field('reference').related_model, Refered)
+        self.assertEqual(ConcreteReferent.reference.through, Through)
 
 
 class TextFieldTests(test.TestCase):
@@ -528,7 +599,8 @@ class SlugFieldTests(test.TestCase):
 class ValidationTest(test.SimpleTestCase):
     def test_charfield_raises_error_on_empty_string(self):
         f = models.CharField()
-        self.assertRaises(ValidationError, f.clean, "", None)
+        with self.assertRaises(ValidationError):
+            f.clean("", None)
 
     def test_charfield_cleans_empty_string_when_blank_true(self):
         f = models.CharField(blank=True)
@@ -540,7 +612,8 @@ class ValidationTest(test.SimpleTestCase):
 
     def test_integerfield_raises_error_on_invalid_intput(self):
         f = models.IntegerField()
-        self.assertRaises(ValidationError, f.clean, "a", None)
+        with self.assertRaises(ValidationError):
+            f.clean("a", None)
 
     def test_charfield_with_choices_cleans_valid_choice(self):
         f = models.CharField(max_length=1,
@@ -549,7 +622,8 @@ class ValidationTest(test.SimpleTestCase):
 
     def test_charfield_with_choices_raises_error_on_invalid_choice(self):
         f = models.CharField(choices=[('a', 'A'), ('b', 'B')])
-        self.assertRaises(ValidationError, f.clean, "not a", None)
+        with self.assertRaises(ValidationError):
+            f.clean("not a", None)
 
     def test_charfield_get_choices_with_blank_defined(self):
         f = models.CharField(choices=[('', '<><>'), ('a', 'A')])
@@ -569,7 +643,8 @@ class ValidationTest(test.SimpleTestCase):
 
     def test_nullable_integerfield_raises_error_with_blank_false(self):
         f = models.IntegerField(null=True, blank=False)
-        self.assertRaises(ValidationError, f.clean, None, None)
+        with self.assertRaises(ValidationError):
+            f.clean(None, None)
 
     def test_nullable_integerfield_cleans_none_on_null_and_blank_true(self):
         f = models.IntegerField(null=True, blank=True)
@@ -577,16 +652,20 @@ class ValidationTest(test.SimpleTestCase):
 
     def test_integerfield_raises_error_on_empty_input(self):
         f = models.IntegerField(null=False)
-        self.assertRaises(ValidationError, f.clean, None, None)
-        self.assertRaises(ValidationError, f.clean, '', None)
+        with self.assertRaises(ValidationError):
+            f.clean(None, None)
+        with self.assertRaises(ValidationError):
+            f.clean('', None)
 
     def test_integerfield_validates_zero_against_choices(self):
         f = models.IntegerField(choices=((1, 1),))
-        self.assertRaises(ValidationError, f.clean, '0', None)
+        with self.assertRaises(ValidationError):
+            f.clean('0', None)
 
     def test_charfield_raises_error_on_empty_input(self):
         f = models.CharField(null=False)
-        self.assertRaises(ValidationError, f.clean, None, None)
+        with self.assertRaises(ValidationError):
+            f.clean(None, None)
 
     def test_datefield_cleans_date(self):
         f = models.DateField()
@@ -594,12 +673,19 @@ class ValidationTest(test.SimpleTestCase):
 
     def test_boolean_field_doesnt_accept_empty_input(self):
         f = models.BooleanField()
-        self.assertRaises(ValidationError, f.clean, None, None)
+        with self.assertRaises(ValidationError):
+            f.clean(None, None)
 
 
 class IntegerFieldTests(test.TestCase):
     model = IntegerModel
     documented_range = (-2147483648, 2147483647)
+
+    @property
+    def backend_range(self):
+        field = self.model._meta.get_field('value')
+        internal_type = field.get_internal_type()
+        return connection.ops.integer_field_range(internal_type)
 
     def test_documented_range(self):
         """
@@ -622,14 +708,34 @@ class IntegerFieldTests(test.TestCase):
         self.assertEqual(qs.count(), 1)
         self.assertEqual(qs[0].value, max_value)
 
+    def test_backend_range_save(self):
+        """
+        Ensure that backend specific range can be saved without corruption.
+        """
+        min_value, max_value = self.backend_range
+
+        if min_value is not None:
+            instance = self.model(value=min_value)
+            instance.full_clean()
+            instance.save()
+            qs = self.model.objects.filter(value__lte=min_value)
+            self.assertEqual(qs.count(), 1)
+            self.assertEqual(qs[0].value, min_value)
+
+        if max_value is not None:
+            instance = self.model(value=max_value)
+            instance.full_clean()
+            instance.save()
+            qs = self.model.objects.filter(value__gte=max_value)
+            self.assertEqual(qs.count(), 1)
+            self.assertEqual(qs[0].value, max_value)
+
     def test_backend_range_validation(self):
         """
         Ensure that backend specific range are enforced at the model
         validation level. ref #12030.
         """
-        field = self.model._meta.get_field('value')
-        internal_type = field.get_internal_type()
-        min_value, max_value = connection.ops.integer_field_range(internal_type)
+        min_value, max_value = self.backend_range
 
         if min_value is not None:
             instance = self.model(value=min_value - 1)
@@ -743,6 +849,11 @@ class FileFieldTests(unittest.TestCase):
         except OSError:
             self.fail("Deleting an unset FileField should not raise OSError.")
 
+    def test_refresh_from_db(self):
+        d = Document.objects.create(myfile='something.txt')
+        d.refresh_from_db()
+        self.assertIs(d.myfile.instance, d)
+
 
 class BinaryFieldTests(test.TestCase):
     binary_data = b'\x00\x46\xFE'
@@ -763,7 +874,8 @@ class BinaryFieldTests(test.TestCase):
 
     def test_max_length(self):
         dm = DataModel(short_data=self.binary_data * 4)
-        self.assertRaises(ValidationError, dm.full_clean)
+        with self.assertRaises(ValidationError):
+            dm.full_clean()
 
 
 class GenericIPAddressFieldTests(test.TestCase):
@@ -774,10 +886,12 @@ class GenericIPAddressFieldTests(test.TestCase):
         """
         model_field = models.GenericIPAddressField(protocol='IPv4')
         form_field = model_field.formfield()
-        self.assertRaises(ValidationError, form_field.clean, '::1')
+        with self.assertRaises(ValidationError):
+            form_field.clean('::1')
         model_field = models.GenericIPAddressField(protocol='IPv6')
         form_field = model_field.formfield()
-        self.assertRaises(ValidationError, form_field.clean, '127.0.0.1')
+        with self.assertRaises(ValidationError):
+            form_field.clean('127.0.0.1')
 
     def test_null_value(self):
         """

@@ -11,6 +11,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.forms.utils import flatatt, to_current_timezone
+from django.templatetags.static import static
 from django.utils import datetime_safe, formats, six
 from django.utils.datastructures import MultiValueDict
 from django.utils.dates import MONTHS
@@ -21,7 +22,6 @@ from django.utils.formats import get_format
 from django.utils.html import conditional_escape, format_html, html_safe
 from django.utils.safestring import mark_safe
 from django.utils.six.moves import range
-from django.utils.six.moves.urllib.parse import urljoin
 from django.utils.translation import ugettext_lazy
 
 __all__ = (
@@ -77,16 +77,15 @@ class Media(object):
             ) for path in self._css[medium]
         ] for medium in media])
 
-    def absolute_path(self, path, prefix=None):
+    def absolute_path(self, path):
+        """
+        Given a relative or absolute path to a static asset, return an absolute
+        path. An absolute path will be returned unchanged while a relative path
+        will be passed to django.templatetags.static.static().
+        """
         if path.startswith(('http://', 'https://', '/')):
             return path
-        if prefix is None:
-            if settings.STATIC_URL is None:
-                # backwards compatibility
-                prefix = settings.MEDIA_URL
-            else:
-                prefix = settings.STATIC_URL
-        return urljoin(prefix, path)
+        return static(path)
 
     def __getitem__(self, name):
         "Returns a Media object that only contains media of the given type"
@@ -308,12 +307,7 @@ class MultipleHiddenInput(HiddenInput):
     A widget that handles <input type="hidden"> for fields that have a list
     of values.
     """
-    def __init__(self, attrs=None, choices=()):
-        super(MultipleHiddenInput, self).__init__(attrs)
-        # choices can be any iterable
-        self.choices = choices
-
-    def render(self, name, value, attrs=None, choices=()):
+    def render(self, name, value, attrs=None):
         if value is None:
             value = []
         final_attrs = self.build_attrs(attrs, type=self.input_type, name=name)
@@ -378,15 +372,7 @@ class ClearableFileInput(FileInput):
         """
         Return whether value is considered to be initial value.
         """
-        # hasattr() masks exceptions on Python 2.
-        if six.PY2:
-            try:
-                getattr(value, 'url')
-            except AttributeError:
-                return False
-            else:
-                return bool(value)
-        return bool(value and hasattr(value, 'url'))
+        return bool(value and getattr(value, 'url', False))
 
     def get_template_substitution_values(self, value):
         """
@@ -528,12 +514,12 @@ class Select(Widget):
         memo[id(self)] = obj
         return obj
 
-    def render(self, name, value, attrs=None, choices=()):
+    def render(self, name, value, attrs=None):
         if value is None:
             value = ''
         final_attrs = self.build_attrs(attrs, name=name)
         output = [format_html('<select{}>', flatatt(final_attrs))]
-        options = self.render_options(choices, [value])
+        options = self.render_options([value])
         if options:
             output.append(options)
         output.append('</select>')
@@ -555,11 +541,11 @@ class Select(Widget):
                            selected_html,
                            force_text(option_label))
 
-    def render_options(self, choices, selected_choices):
+    def render_options(self, selected_choices):
         # Normalize to strings.
         selected_choices = set(force_text(v) for v in selected_choices)
         output = []
-        for option_value, option_label in chain(self.choices, choices):
+        for option_value, option_label in self.choices:
             if isinstance(option_label, (list, tuple)):
                 output.append(format_html('<optgroup label="{}">', force_text(option_value)))
                 for option in option_label:
@@ -580,12 +566,12 @@ class NullBooleanSelect(Select):
                    ('3', ugettext_lazy('No')))
         super(NullBooleanSelect, self).__init__(attrs, choices)
 
-    def render(self, name, value, attrs=None, choices=()):
+    def render(self, name, value, attrs=None):
         try:
             value = {True: '2', False: '3', '2': '2', '3': '3'}[value]
         except KeyError:
             value = '1'
-        return super(NullBooleanSelect, self).render(name, value, attrs, choices)
+        return super(NullBooleanSelect, self).render(name, value, attrs)
 
     def value_from_datadict(self, data, files, name):
         value = data.get(name)
@@ -600,12 +586,12 @@ class NullBooleanSelect(Select):
 class SelectMultiple(Select):
     allow_multiple_selected = True
 
-    def render(self, name, value, attrs=None, choices=()):
+    def render(self, name, value, attrs=None):
         if value is None:
             value = []
         final_attrs = self.build_attrs(attrs, name=name)
         output = [format_html('<select multiple="multiple"{}>', flatatt(final_attrs))]
-        options = self.render_options(choices, value)
+        options = self.render_options(value)
         if options:
             output.append(options)
         output.append('</select>')
@@ -639,7 +625,7 @@ class ChoiceInput(SubWidget):
     def __str__(self):
         return self.render()
 
-    def render(self, name=None, value=None, attrs=None, choices=()):
+    def render(self, name=None, value=None, attrs=None):
         if self.id_for_label:
             label_for = format_html(' for="{}"', self.id_for_label)
         else:

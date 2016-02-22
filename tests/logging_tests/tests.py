@@ -6,16 +6,16 @@ import warnings
 
 from admin_scripts.tests import AdminScriptTestCase
 
+from django.conf import settings
 from django.core import mail
 from django.core.files.temp import NamedTemporaryFile
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.test.utils import LoggingCaptureMixin, patch_logger
 from django.utils.deprecation import RemovedInNextVersionWarning
-from django.utils.encoding import force_text
 from django.utils.log import (
-    AdminEmailHandler, CallbackFilter, RequireDebugFalse, RequireDebugTrue,
+    DEFAULT_LOGGING, AdminEmailHandler, CallbackFilter, RequireDebugFalse,
+    RequireDebugTrue,
 )
-from django.utils.six import StringIO
 
 from .logconfig import MyEmailBackend
 
@@ -67,6 +67,17 @@ class LoggingFiltersTest(SimpleTestCase):
 
 class DefaultLoggingTest(LoggingCaptureMixin, SimpleTestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        super(DefaultLoggingTest, cls).setUpClass()
+        cls._logging = settings.LOGGING
+        logging.config.dictConfig(DEFAULT_LOGGING)
+
+    @classmethod
+    def tearDownClass(cls):
+        super(DefaultLoggingTest, cls).tearDownClass()
+        logging.config.dictConfig(cls._logging)
+
     def test_django_logger(self):
         """
         The 'django' base logger only output anything when DEBUG=True.
@@ -77,6 +88,21 @@ class DefaultLoggingTest(LoggingCaptureMixin, SimpleTestCase):
         with self.settings(DEBUG=True):
             self.logger.error("Hey, this is an error.")
             self.assertEqual(self.logger_output.getvalue(), 'Hey, this is an error.\n')
+
+    def test_django_logger_warning(self):
+        with self.settings(DEBUG=True):
+            self.logger.warning('warning')
+            self.assertEqual(self.logger_output.getvalue(), 'warning\n')
+
+    def test_django_logger_info(self):
+        with self.settings(DEBUG=True):
+            self.logger.info('info')
+            self.assertEqual(self.logger_output.getvalue(), 'info\n')
+
+    def test_django_logger_debug(self):
+        with self.settings(DEBUG=True):
+            self.logger.debug('debug')
+            self.assertEqual(self.logger_output.getvalue(), '')
 
 
 class WarningLoggerTests(SimpleTestCase):
@@ -93,38 +119,9 @@ class WarningLoggerTests(SimpleTestCase):
         self._old_capture_state = bool(getattr(logging, '_warnings_showwarning', False))
         logging.captureWarnings(True)
 
-        # this convoluted setup is to avoid printing this deprecation to
-        # stderr during test running - as the test runner forces deprecations
-        # to be displayed at the global py.warnings level
-        self.logger = logging.getLogger('py.warnings')
-        self.outputs = []
-        self.old_streams = []
-        for handler in self.logger.handlers:
-            self.old_streams.append(handler.stream)
-            self.outputs.append(StringIO())
-            handler.stream = self.outputs[-1]
-
     def tearDown(self):
-        for i, handler in enumerate(self.logger.handlers):
-            self.logger.handlers[i].stream = self.old_streams[i]
-
         # Reset warnings state.
         logging.captureWarnings(self._old_capture_state)
-
-    @override_settings(DEBUG=True)
-    def test_warnings_capture(self):
-        with warnings.catch_warnings():
-            warnings.filterwarnings('always')
-            warnings.warn('Foo Deprecated', RemovedInNextVersionWarning)
-            output = force_text(self.outputs[0].getvalue())
-            self.assertIn('Foo Deprecated', output)
-
-    def test_warnings_capture_debug_false(self):
-        with warnings.catch_warnings():
-            warnings.filterwarnings('always')
-            warnings.warn('Foo Deprecated', RemovedInNextVersionWarning)
-            output = force_text(self.outputs[0].getvalue())
-            self.assertNotIn('Foo Deprecated', output)
 
     @override_settings(DEBUG=True)
     def test_error_filter_still_raises(self):

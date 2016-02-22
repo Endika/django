@@ -112,7 +112,7 @@ class FileUploadTests(TestCase):
         tdir = sys_tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tdir, True)
 
-        # This file contains chinese symbols and an accented char in the name.
+        # This file contains Chinese symbols and an accented char in the name.
         with open(os.path.join(tdir, UNICODE_FILENAME), 'w+b') as file1:
             file1.write(b'b' * (2 ** 10))
             file1.seek(0)
@@ -156,14 +156,18 @@ class FileUploadTests(TestCase):
         (#22971).
         """
         payload = client.FakePayload()
-        payload.write('\r\n'.join([
-            '--' + client.BOUNDARY,
-            'Content-Disposition: form-data; name*=UTF-8\'\'file_unicode; filename*=UTF-8\'\'%s' % urlquote(UNICODE_FILENAME),
-            'Content-Type: application/octet-stream',
-            '',
-            'You got pwnd.\r\n',
-            '\r\n--' + client.BOUNDARY + '--\r\n'
-        ]))
+        payload.write(
+            '\r\n'.join([
+                '--' + client.BOUNDARY,
+                'Content-Disposition: form-data; name*=UTF-8\'\'file_unicode; filename*=UTF-8\'\'%s' % urlquote(
+                    UNICODE_FILENAME
+                ),
+                'Content-Type: application/octet-stream',
+                '',
+                'You got pwnd.\r\n',
+                '\r\n--' + client.BOUNDARY + '--\r\n'
+            ])
+        )
 
         r = {
             'CONTENT_LENGTH': len(payload),
@@ -372,12 +376,8 @@ class FileUploadTests(TestCase):
             file.seek(0)
 
             # AttributeError: You cannot alter upload handlers after the upload has been processed.
-            self.assertRaises(
-                AttributeError,
-                self.client.post,
-                '/quota/broken/',
-                {'f': file}
-            )
+            with self.assertRaises(AttributeError):
+                self.client.post('/quota/broken/', {'f': file})
 
     def test_fileupload_getlist(self):
         file = tempfile.NamedTemporaryFile

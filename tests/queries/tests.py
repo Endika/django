@@ -73,12 +73,12 @@ class Queries1Tests(BaseQuerysetTest):
         time3 = datetime.datetime(2007, 12, 20, 22, 25, 0)
         time4 = datetime.datetime(2007, 12, 20, 21, 0, 0)
         cls.i1 = Item.objects.create(name='one', created=cls.time1, modified=cls.time1, creator=cls.a1, note=cls.n3)
-        cls.i1.tags = [cls.t1, cls.t2]
+        cls.i1.tags.set([cls.t1, cls.t2])
         cls.i2 = Item.objects.create(name='two', created=cls.time2, creator=cls.a2, note=n2)
-        cls.i2.tags = [cls.t1, cls.t3]
+        cls.i2.tags.set([cls.t1, cls.t3])
         cls.i3 = Item.objects.create(name='three', created=time3, creator=cls.a2, note=cls.n3)
         i4 = Item.objects.create(name='four', created=time4, creator=cls.a4, note=cls.n3)
-        i4.tags = [t4]
+        i4.tags.set([t4])
 
         cls.r1 = Report.objects.create(name='r1', creator=cls.a1)
         Report.objects.create(name='r2', creator=a3)
@@ -227,11 +227,25 @@ class Queries1Tests(BaseQuerysetTest):
             4
         )
         self.assertEqual(
-            Item.objects.exclude(name='two').extra(select={'foo': '%s'}, select_params=(1,)).values('creator', 'name', 'foo').distinct().count(),
+            (
+                Item.objects
+                .exclude(name='two')
+                .extra(select={'foo': '%s'}, select_params=(1,))
+                .values('creator', 'name', 'foo')
+                .distinct()
+                .count()
+            ),
             4
         )
         self.assertEqual(
-            Item.objects.exclude(name='two').extra(select={'foo': '%s'}, select_params=(1,)).values('creator', 'name').distinct().count(),
+            (
+                Item.objects
+                .exclude(name='two')
+                .extra(select={'foo': '%s'}, select_params=(1,))
+                .values('creator', 'name')
+                .distinct()
+                .count()
+            ),
             4
         )
         xx.delete()
@@ -355,7 +369,10 @@ class Queries1Tests(BaseQuerysetTest):
         # involve one "left outer" join (Author -> Item is 0-to-many).
         qs = Author.objects.filter(id=self.a1.id).filter(Q(extra__note=self.n1) | Q(item__note=self.n3))
         self.assertEqual(
-            len([x for x in qs.query.alias_map.values() if x.join_type == LOUTER and qs.query.alias_refcount[x.table_alias]]),
+            len([
+                x for x in qs.query.alias_map.values()
+                if x.join_type == LOUTER and qs.query.alias_refcount[x.table_alias]
+            ]),
             1
         )
 
@@ -414,16 +431,10 @@ class Queries1Tests(BaseQuerysetTest):
     def test_heterogeneous_qs_combination(self):
         # Combining querysets built on different models should behave in a well-defined
         # fashion. We raise an error.
-        self.assertRaisesMessage(
-            AssertionError,
-            'Cannot combine queries on two different base models.',
-            lambda: Author.objects.all() & Tag.objects.all()
-        )
-        self.assertRaisesMessage(
-            AssertionError,
-            'Cannot combine queries on two different base models.',
-            lambda: Author.objects.all() | Tag.objects.all()
-        )
+        with self.assertRaisesMessage(AssertionError, 'Cannot combine queries on two different base models.'):
+            Author.objects.all() & Tag.objects.all()
+        with self.assertRaisesMessage(AssertionError, 'Cannot combine queries on two different base models.'):
+            Author.objects.all() | Tag.objects.all()
 
     def test_ticket3141(self):
         self.assertEqual(Author.objects.extra(select={'foo': '1'}).count(), 4)
@@ -568,7 +579,13 @@ class Queries1Tests(BaseQuerysetTest):
         self.assertEqual(d, {'a': 'one', 'b': 'two'})
 
         # Order by the number of tags attached to an item.
-        l = Item.objects.extra(select={'count': 'select count(*) from queries_item_tags where queries_item_tags.item_id = queries_item.id'}).order_by('-count')
+        l = (
+            Item.objects
+            .extra(select={
+                'count': 'select count(*) from queries_item_tags where queries_item_tags.item_id = queries_item.id'
+            })
+            .order_by('-count')
+        )
         self.assertEqual([o.count for o in l], [2, 2, 1, 0])
 
     def test_ticket6154(self):
@@ -704,7 +721,9 @@ class Queries1Tests(BaseQuerysetTest):
 
     def test_ticket7277(self):
         self.assertQuerysetEqual(
-            self.n1.annotation_set.filter(Q(tag=self.t5) | Q(tag__children=self.t5) | Q(tag__children__children=self.t5)),
+            self.n1.annotation_set.filter(
+                Q(tag=self.t5) | Q(tag__children=self.t5) | Q(tag__children__children=self.t5)
+            ),
             ['<Annotation: a1>']
         )
 
@@ -734,11 +753,8 @@ class Queries1Tests(BaseQuerysetTest):
                 []
             )
             q.query.low_mark = 1
-            self.assertRaisesMessage(
-                AssertionError,
-                'Cannot change a query once a slice has been taken',
-                q.extra, select={'foo': "1"}
-            )
+            with self.assertRaisesMessage(AssertionError, 'Cannot change a query once a slice has been taken'):
+                q.extra(select={'foo': "1"})
             self.assertQuerysetEqual(q.reverse(), [])
             self.assertQuerysetEqual(q.defer('meal'), [])
             self.assertQuerysetEqual(q.only('meal'), [])
@@ -751,7 +767,7 @@ class Queries1Tests(BaseQuerysetTest):
             3
         )
 
-        # Pickling of DateQuerySets used to fail
+        # Pickling of QuerySets using datetimes() should work.
         qs = Item.objects.datetimes('created', 'month')
         pickle.loads(pickle.dumps(qs))
 
@@ -765,16 +781,10 @@ class Queries1Tests(BaseQuerysetTest):
         )
 
         # Multi-valued values() and values_list() querysets should raise errors.
-        self.assertRaisesMessage(
-            TypeError,
-            'Cannot use multi-field values as a filter value.',
-            lambda: Tag.objects.filter(name__in=Tag.objects.filter(parent=self.t1).values('name', 'id'))
-        )
-        self.assertRaisesMessage(
-            TypeError,
-            'Cannot use multi-field values as a filter value.',
-            lambda: Tag.objects.filter(name__in=Tag.objects.filter(parent=self.t1).values_list('name', 'id'))
-        )
+        with self.assertRaisesMessage(TypeError, 'Cannot use multi-field values as a filter value.'):
+            Tag.objects.filter(name__in=Tag.objects.filter(parent=self.t1).values('name', 'id'))
+        with self.assertRaisesMessage(TypeError, 'Cannot use multi-field values as a filter value.'):
+            Tag.objects.filter(name__in=Tag.objects.filter(parent=self.t1).values_list('name', 'id'))
 
     def test_ticket9985(self):
         # qs.values_list(...).values(...) combinations should work.
@@ -1302,21 +1312,16 @@ class Queries3Tests(BaseQuerysetTest):
         self.assertQuerysetEqual(Valid.objects.all(), [])
 
     def test_ticket8683(self):
-        # Raise proper error when a DateQuerySet gets passed a wrong type of
-        # field
-        self.assertRaisesMessage(
-            AssertionError,
-            "'name' isn't a DateTimeField.",
-            Item.objects.datetimes, 'name', 'month'
-        )
+        # An error should be raised when QuerySet.datetimes() is passed the
+        # wrong type of field.
+        with self.assertRaisesMessage(AssertionError, "'name' isn't a DateTimeField."):
+            Item.objects.datetimes('name', 'month')
 
     def test_ticket22023(self):
-        with self.assertRaisesMessage(TypeError,
-                "Cannot call only() after .values() or .values_list()"):
+        with self.assertRaisesMessage(TypeError, "Cannot call only() after .values() or .values_list()"):
             Valid.objects.values().only()
 
-        with self.assertRaisesMessage(TypeError,
-                "Cannot call defer() after .values() or .values_list()"):
+        with self.assertRaisesMessage(TypeError, "Cannot call defer() after .values() or .values_list()"):
             Valid.objects.values().defer()
 
 
@@ -1348,16 +1353,15 @@ class Queries4Tests(BaseQuerysetTest):
         math101 = tag.note_set.create(note='MATH', misc='101')
         s1 = tag.annotation_set.create(name='1')
         s2 = tag.annotation_set.create(name='2')
-        s1.notes = [math101, anth100]
-        s2.notes = [math101]
+        s1.notes.set([math101, anth100])
+        s2.notes.set([math101])
         result = math101.annotation_set.all() & tag.annotation_set.exclude(notes__in=[anth100])
         self.assertEqual(list(result), [s2])
 
     def test_ticket11811(self):
         unsaved_category = NamedCategory(name="Other")
-        with six.assertRaisesRegex(self, ValueError,
-                'Unsaved model instance <NamedCategory: Other> '
-                'cannot be used in an ORM query.'):
+        msg = 'Unsaved model instance <NamedCategory: Other> cannot be used in an ORM query.'
+        with self.assertRaisesMessage(ValueError, msg):
             Tag.objects.filter(pk=self.t1.pk).update(category=unsaved_category)
 
     def test_ticket14876(self):
@@ -1376,12 +1380,19 @@ class Queries4Tests(BaseQuerysetTest):
         self.assertEqual(str(q1.query), str(q2.query))
 
         q1 = Item.objects.filter(Q(creator=self.a1) | Q(creator__report__name='r1')).order_by()
-        q2 = Item.objects.filter(Q(creator=self.a1)).order_by() | Item.objects.filter(Q(creator__report__name='r1')).order_by()
+        q2 = (
+            Item.objects
+            .filter(Q(creator=self.a1)).order_by() | Item.objects.filter(Q(creator__report__name='r1'))
+            .order_by()
+        )
         self.assertQuerysetEqual(q1, ["<Item: i1>"])
         self.assertEqual(str(q1.query), str(q2.query))
 
         q1 = Item.objects.filter(Q(creator__report__name='e1') | Q(creator=self.a1)).order_by()
-        q2 = Item.objects.filter(Q(creator__report__name='e1')).order_by() | Item.objects.filter(Q(creator=self.a1)).order_by()
+        q2 = (
+            Item.objects.filter(Q(creator__report__name='e1')).order_by()
+            | Item.objects.filter(Q(creator=self.a1)).order_by()
+        )
         self.assertQuerysetEqual(q1, ["<Item: i1>"])
         self.assertEqual(str(q1.query), str(q2.query))
 
@@ -1852,7 +1863,7 @@ class Queries6Tests(TestCase):
     def test_tickets_8921_9188(self):
         # Incorrect SQL was being generated for certain types of exclude()
         # queries that crossed multi-valued relations (#8921, #9188 and some
-        # pre-emptively discovered cases).
+        # preemptively discovered cases).
 
         self.assertQuerysetEqual(
             PointerA.objects.filter(connection__pointerb__id=1),
@@ -2231,9 +2242,8 @@ class ValuesQuerysetTests(BaseQuerysetTest):
 
     def test_field_error_values_list(self):
         # see #23443
-        with self.assertRaisesMessage(FieldError,
-                "Cannot resolve keyword %r into field."
-                " Join on 'name' not permitted." % 'foo'):
+        msg = "Cannot resolve keyword %r into field. Join on 'name' not permitted." % 'foo'
+        with self.assertRaisesMessage(FieldError, msg):
             Tag.objects.values_list('name__foo')
 
 
@@ -2307,48 +2317,26 @@ class QuerySetSupportsPythonIdioms(TestCase):
              "<Article: Article 7>"])
 
     def test_slicing_cannot_filter_queryset_once_sliced(self):
-        six.assertRaisesRegex(
-            self,
-            AssertionError,
-            "Cannot filter a query once a slice has been taken.",
-            Article.objects.all()[0:5].filter,
-            id=1,
-        )
+        with self.assertRaisesMessage(AssertionError, "Cannot filter a query once a slice has been taken."):
+            Article.objects.all()[0:5].filter(id=1, )
 
     def test_slicing_cannot_reorder_queryset_once_sliced(self):
-        six.assertRaisesRegex(
-            self,
-            AssertionError,
-            "Cannot reorder a query once a slice has been taken.",
-            Article.objects.all()[0:5].order_by,
-            'id',
-        )
+        with self.assertRaisesMessage(AssertionError, "Cannot reorder a query once a slice has been taken."):
+            Article.objects.all()[0:5].order_by('id', )
 
     def test_slicing_cannot_combine_queries_once_sliced(self):
-        six.assertRaisesRegex(
-            self,
-            AssertionError,
-            "Cannot combine queries once a slice has been taken.",
-            lambda: Article.objects.all()[0:1] & Article.objects.all()[4:5]
-        )
+        with self.assertRaisesMessage(AssertionError, "Cannot combine queries once a slice has been taken."):
+            Article.objects.all()[0:1] & Article.objects.all()[4:5]
 
     def test_slicing_negative_indexing_not_supported_for_single_element(self):
         """hint: inverting your ordering might do what you need"""
-        six.assertRaisesRegex(
-            self,
-            AssertionError,
-            "Negative indexing is not supported.",
-            lambda: Article.objects.all()[-1]
-        )
+        with self.assertRaisesMessage(AssertionError, "Negative indexing is not supported."):
+            Article.objects.all()[-1]
 
     def test_slicing_negative_indexing_not_supported_for_range(self):
         """hint: inverting your ordering might do what you need"""
-        six.assertRaisesRegex(
-            self,
-            AssertionError,
-            "Negative indexing is not supported.",
-            lambda: Article.objects.all()[0:-5]
-        )
+        with self.assertRaisesMessage(AssertionError, "Negative indexing is not supported."):
+            Article.objects.all()[0:-5]
 
     def test_can_get_number_of_items_in_queryset_using_standard_len(self):
         self.assertEqual(len(Article.objects.filter(name__exact='Article 1')), 1)
@@ -2381,11 +2369,8 @@ class WeirdQuerysetSlicingTests(BaseQuerysetTest):
         self.assertQuerysetEqual(Article.objects.all()[0:0], [])
         self.assertQuerysetEqual(Article.objects.all()[0:0][:10], [])
         self.assertEqual(Article.objects.all()[:0].count(), 0)
-        self.assertRaisesMessage(
-            AssertionError,
-            'Cannot change a query once a slice has been taken.',
-            Article.objects.all()[:0].latest, 'created'
-        )
+        with self.assertRaisesMessage(AssertionError, 'Cannot change a query once a slice has been taken.'):
+            Article.objects.all()[:0].latest('created')
 
     def test_empty_resultset_sql(self):
         # ticket #12192
@@ -2396,6 +2381,12 @@ class WeirdQuerysetSlicingTests(BaseQuerysetTest):
 
     def test_empty_sliced_subquery_exclude(self):
         self.assertEqual(Eaten.objects.exclude(food__in=Food.objects.all()[0:0]).count(), 1)
+
+    def test_zero_length_values_slicing(self):
+        n = 42
+        with self.assertNumQueries(0):
+            self.assertQuerysetEqual(Article.objects.values()[n:n], [])
+            self.assertQuerysetEqual(Article.objects.values_list()[n:n], [])
 
 
 class EscapingTests(TestCase):
@@ -2423,6 +2414,18 @@ class ToFieldTests(TestCase):
         self.assertEqual(
             set(Eaten.objects.filter(food__in=[apple, pear])),
             {lunch, dinner},
+        )
+
+    def test_in_subquery(self):
+        apple = Food.objects.create(name="apple")
+        lunch = Eaten.objects.create(food=apple, meal="lunch")
+        self.assertEqual(
+            set(Eaten.objects.filter(food__in=Food.objects.filter(name='apple'))),
+            {lunch}
+        )
+        self.assertEqual(
+            set(Eaten.objects.filter(food__in=Food.objects.filter(name='apple').values('eaten__meal'))),
+            set()
         )
 
     def test_reverse_in(self):
@@ -2490,16 +2493,10 @@ class ConditionalTests(BaseQuerysetTest):
     def test_infinite_loop(self):
         # If you're not careful, it's possible to introduce infinite loops via
         # default ordering on foreign keys in a cycle. We detect that.
-        self.assertRaisesMessage(
-            FieldError,
-            'Infinite loop caused by ordering.',
-            lambda: list(LoopX.objects.all())  # Force queryset evaluation with list()
-        )
-        self.assertRaisesMessage(
-            FieldError,
-            'Infinite loop caused by ordering.',
-            lambda: list(LoopZ.objects.all())  # Force queryset evaluation with list()
-        )
+        with self.assertRaisesMessage(FieldError, 'Infinite loop caused by ordering.'):
+            list(LoopX.objects.all())  # Force queryset evaluation with list()
+        with self.assertRaisesMessage(FieldError, 'Infinite loop caused by ordering.'):
+            list(LoopZ.objects.all())  # Force queryset evaluation with list()
 
         # Note that this doesn't cause an infinite loop, since the default
         # ordering on the Tag model is empty (and thus defaults to using "id"
@@ -2621,7 +2618,10 @@ class DefaultValuesInsertTest(TestCase):
         try:
             DumbCategory.objects.create()
         except TypeError:
-            self.fail("Creation of an instance of a model with only the PK field shouldn't error out after bulk insert refactoring (#17056)")
+            self.fail(
+                "Creation of an instance of a model with only the PK field "
+                "shouldn't error out after bulk insert refactoring (#17056)"
+            )
 
 
 class ExcludeTests(TestCase):
@@ -2889,7 +2889,8 @@ class WhereNodeTest(TestCase):
     def test_empty_full_handling_conjunction(self):
         compiler = WhereNodeTest.MockCompiler()
         w = WhereNode(children=[NothingNode()])
-        self.assertRaises(EmptyResultSet, w.as_sql, compiler, connection)
+        with self.assertRaises(EmptyResultSet):
+            w.as_sql(compiler, connection)
         w.negate()
         self.assertEqual(w.as_sql(compiler, connection), ('', []))
         w = WhereNode(children=[self.DummyNode(), self.DummyNode()])
@@ -2897,14 +2898,16 @@ class WhereNodeTest(TestCase):
         w.negate()
         self.assertEqual(w.as_sql(compiler, connection), ('NOT (dummy AND dummy)', []))
         w = WhereNode(children=[NothingNode(), self.DummyNode()])
-        self.assertRaises(EmptyResultSet, w.as_sql, compiler, connection)
+        with self.assertRaises(EmptyResultSet):
+            w.as_sql(compiler, connection)
         w.negate()
         self.assertEqual(w.as_sql(compiler, connection), ('', []))
 
     def test_empty_full_handling_disjunction(self):
         compiler = WhereNodeTest.MockCompiler()
         w = WhereNode(children=[NothingNode()], connector='OR')
-        self.assertRaises(EmptyResultSet, w.as_sql, compiler, connection)
+        with self.assertRaises(EmptyResultSet):
+            w.as_sql(compiler, connection)
         w.negate()
         self.assertEqual(w.as_sql(compiler, connection), ('', []))
         w = WhereNode(children=[self.DummyNode(), self.DummyNode()], connector='OR')
@@ -2946,8 +2949,10 @@ class IteratorExceptionsTest(TestCase):
         # Test for #19895 - second iteration over invalid queryset
         # raises errors.
         qs = Article.objects.order_by('invalid_column')
-        self.assertRaises(FieldError, list, qs)
-        self.assertRaises(FieldError, list, qs)
+        with self.assertRaises(FieldError):
+            list(qs)
+        with self.assertRaises(FieldError):
+            list(qs)
 
 
 class NullJoinPromotionOrTest(TestCase):
@@ -3069,7 +3074,7 @@ class NullJoinPromotionOrTest(TestCase):
         p1 = Program.objects.create(identifier=i1)
         c1 = Channel.objects.create(identifier=i1)
         p2 = Program.objects.create(identifier=i2)
-        # Test OR + doubleneq. The expected result is that channel is LOUTER
+        # Test OR + doubleneg. The expected result is that channel is LOUTER
         # joined, program INNER joined
         qs1_filter = Identifier.objects.filter(
             Q(program__id=p2.id, channel__id=c1.id)
@@ -3156,7 +3161,7 @@ class JoinReuseTest(TestCase):
 
 
 class DisjunctionPromotionTests(TestCase):
-    def test_disjuction_promotion_select_related(self):
+    def test_disjunction_promotion_select_related(self):
         fk1 = FK1.objects.create(f1='f1', f2='f2')
         basea = BaseA.objects.create(a=fk1)
         qs = BaseA.objects.filter(Q(a=fk1) | Q(b=2))
@@ -3313,9 +3318,9 @@ class ManyToManyExcludeTest(TestCase):
         pg2 = Page.objects.create(text='pg2')
         pg1 = Page.objects.create(text='pg1')
         pa1 = Paragraph.objects.create(text='pa1')
-        pa1.page = [pg1, pg2]
+        pa1.page.set([pg1, pg2])
         pa2 = Paragraph.objects.create(text='pa2')
-        pa2.page = [pg2, pg3]
+        pa2.page.set([pg2, pg3])
         pa3 = Paragraph.objects.create(text='pa3')
         ch1 = Chapter.objects.create(title='ch1', paragraph=pa1)
         ch2 = Chapter.objects.create(title='ch2', paragraph=pa2)
@@ -3466,25 +3471,20 @@ class RelatedLookupTypeTests(TestCase):
         query lookup.
         """
         # Passing incorrect object type
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.wrong_type, ObjectA._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.wrong_type, ObjectA._meta.object_name)):
             ObjectB.objects.get(objecta=self.wrong_type)
 
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.wrong_type, ObjectA._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.wrong_type, ObjectA._meta.object_name)):
             ObjectB.objects.filter(objecta__in=[self.wrong_type])
 
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.wrong_type, ObjectA._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.wrong_type, ObjectA._meta.object_name)):
             ObjectB.objects.filter(objecta=self.wrong_type)
 
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.wrong_type, ObjectB._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.wrong_type, ObjectB._meta.object_name)):
             ObjectA.objects.filter(objectb__in=[self.wrong_type, self.ob])
 
         # Passing an object of the class on which query is done.
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.ob, ObjectA._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.ob, ObjectA._meta.object_name)):
             ObjectB.objects.filter(objecta__in=[self.poa, self.ob])
 
         with self.assertRaisesMessage(ValueError,
@@ -3496,16 +3496,13 @@ class RelatedLookupTypeTests(TestCase):
         A ValueError is raised when the incorrect object type is passed to a
         query lookup for backward relations.
         """
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.oa, ObjectB._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.oa, ObjectB._meta.object_name)):
             ObjectA.objects.filter(objectb__in=[self.oa, self.ob])
 
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.oa, ObjectB._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.oa, ObjectB._meta.object_name)):
             ObjectA.objects.exclude(objectb=self.oa)
 
-        with self.assertRaisesMessage(ValueError,
-                self.error % (self.wrong_type, ObjectB._meta.object_name)):
+        with self.assertRaisesMessage(ValueError, self.error % (self.wrong_type, ObjectB._meta.object_name)):
             ObjectA.objects.get(objectb=self.wrong_type)
 
     def test_correct_lookup(self):
@@ -3524,7 +3521,10 @@ class RelatedLookupTypeTests(TestCase):
         # child objects
         self.assertQuerysetEqual(ObjectB.objects.filter(objecta__in=[self.coa]), [])
         self.assertQuerysetEqual(ObjectB.objects.filter(objecta__in=[self.poa, self.coa]).order_by('name'), out_b)
-        self.assertQuerysetEqual(ObjectB.objects.filter(objecta__in=iter([self.poa, self.coa])).order_by('name'), out_b)
+        self.assertQuerysetEqual(
+            ObjectB.objects.filter(objecta__in=iter([self.poa, self.coa])).order_by('name'),
+            out_b
+        )
 
         # parent objects
         self.assertQuerysetEqual(ObjectC.objects.exclude(childobjecta=self.oa), out_c)

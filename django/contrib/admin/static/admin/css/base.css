@@ -20,8 +20,12 @@ a:link, a:visited {
     text-decoration: none;
 }
 
-a:hover {
+a:focus, a:hover {
     color: #036;
+}
+
+a:focus {
+    text-decoration: underline;
 }
 
 a img {
@@ -31,6 +35,10 @@ a img {
 a.section:link, a.section:visited {
     color: #fff;
     text-decoration: none;
+}
+
+a.section:focus, a.section:hover {
+    text-decoration: underline;
 }
 
 /* GLOBAL DEFAULTS */
@@ -89,14 +97,6 @@ h5 {
 ul li {
     list-style-type: square;
     padding: 1px 0;
-}
-
-ul.plainlist {
-    margin-left: 0 !important;
-}
-
-ul.plainlist li {
-    list-style-type: none;
 }
 
 li ul {
@@ -187,8 +187,8 @@ p.mini {
     margin-top: -3px;
 }
 
-.help, p.help {
-    font-size: 10px !important;
+.help, p.help, form p.help {
+    font-size: 11px;
     color: #999;
 }
 
@@ -201,12 +201,8 @@ p img, h1 img, h2 img, h3 img, h4 img, td img {
 }
 
 .quiet, a.quiet:link, a.quiet:visited {
-    color: #999 !important;
-    font-weight: normal !important;
-}
-
-.quiet strong {
-    font-weight: bold !important;
+    color: #999;
+    font-weight: normal;
 }
 
 .float-right {
@@ -276,22 +272,8 @@ tfoot td {
     border-top: 1px solid #eee;
 }
 
-thead th:first-child,
-tfoot td:first-child {
-    border-left: none !important;
-}
-
-thead th.optional {
-    font-weight: normal !important;
-}
-
-tr.row-label td {
-    font-size: 9px;
-    padding-top: 2px;
-    padding-bottom: 0;
-    border-bottom: none;
-    color: #666;
-    margin-top: -1px;
+thead th.required {
+    color: #000;
 }
 
 tr.alt {
@@ -338,7 +320,7 @@ table thead th .text a {
     padding: 8px 10px;
 }
 
-table thead th.sortable:hover {
+table thead th .text a:focus, table thead th .text a:hover {
     background: #eee;
 }
 
@@ -389,10 +371,12 @@ table thead th.sorted .sortoptions a.sortremove:after {
     color: #999;
 }
 
+table thead th.sorted .sortoptions a.sortremove:focus:after,
 table thead th.sorted .sortoptions a.sortremove:hover:after {
     color: #447e9b;
 }
 
+table thead th.sorted .sortoptions a.sortremove:focus,
 table thead th.sorted .sortoptions a.sortremove:hover {
     background-position: 0 -14px;
 }
@@ -401,6 +385,7 @@ table thead th.sorted .sortoptions a.ascending {
     background-position: 0 -28px;
 }
 
+table thead th.sorted .sortoptions a.ascending:focus,
 table thead th.sorted .sortoptions a.ascending:hover {
     background-position: 0 -42px;
 }
@@ -410,6 +395,7 @@ table thead th.sorted .sortoptions a.descending {
     background-position: 0 -56px;
 }
 
+table thead th.sorted .sortoptions a.descending:focus,
 table thead th.sorted .sortoptions a.descending:hover {
     background-position: 0 -70px;
 }
@@ -426,7 +412,7 @@ input, textarea, select, .form-row p, form .button {
 }
 
 textarea {
-    vertical-align: top !important;
+    vertical-align: top;
 }
 
 input[type=text], input[type=password], input[type=email], input[type=url],
@@ -435,7 +421,6 @@ input[type=number], textarea, select, .vTextField {
     border-radius: 4px;
     padding: 5px 6px;
     margin-top: 0;
-    outline: none;
 }
 
 input[type=text]:focus, input[type=password]:focus, input[type=email]:focus,
@@ -458,7 +443,6 @@ select[multiple] {
     background: #79aec8;
     padding: 10px 15px;
     border: none;
-    outline: none;
     border-radius: 4px;
     color: #fff;
     cursor: pointer;
@@ -469,6 +453,7 @@ a.button {
 }
 
 .button:active, input[type=submit]:active, input[type=button]:active,
+.button:focus, input[type=submit]:focus, input[type=button]:focus,
 .button:hover, input[type=submit]:hover, input[type=button]:hover {
     background: #609ab6;
 }
@@ -485,6 +470,7 @@ a.button {
 }
 
 .button.default:active, input[type=submit].default:active,
+.button.default:focus, input[type=submit].default:focus,
 .button.default:hover, input[type=submit].default:hover {
     background: #205067;
 }
@@ -571,7 +557,7 @@ ul.messagelist li.error {
 }
 
 .errornote {
-    font-size: 14px !important;
+    font-size: 14px;
     font-weight: 700;
     display: block;
     padding: 10px 12px;
@@ -584,14 +570,14 @@ ul.messagelist li.error {
 }
 
 ul.errorlist {
-    margin: 0 0 4px !important;
-    padding: 0 !important;
+    margin: 0 0 4px;
+    padding: 0;
     color: #ba2121;
     background: #fff;
 }
 
 ul.errorlist li {
-    font-size: 13px !important;
+    font-size: 13px;
     display: block;
     margin-bottom: 4px;
 }
@@ -606,12 +592,12 @@ ul.errorlist li a {
 }
 
 td ul.errorlist {
-    margin: 0 !important;
-    padding: 0 !important;
+    margin: 0;
+    padding: 0;
 }
 
 td ul.errorlist li {
-    margin: 0 !important;
+    margin: 0;
 }
 
 .form-row.errors {
@@ -663,7 +649,7 @@ div.breadcrumbs a {
     color: #fff;
 }
 
-div.breadcrumbs a:hover {
+div.breadcrumbs a:focus, div.breadcrumbs a:hover {
     color: #c4dce8;
 }
 
@@ -688,8 +674,9 @@ a.deletelink:link, a.deletelink:visited {
     color: #CC3434;
 }
 
-a.deletelink:hover {
+a.deletelink:focus, a.deletelink:hover {
     color: #993333;
+    text-decoration: none;
 }
 
 /* OBJECT TOOLS */
@@ -734,18 +721,26 @@ a.deletelink:hover {
     color: #fff;
 }
 
-.object-tools a:hover, .object-tools li:hover a {
+.object-tools a:focus, .object-tools a:hover {
     background-color: #417690;
 }
 
-.object-tools a.viewsitelink, .object-tools a.golink {
-    background: #999 url(../img/tooltag-arrowright.svg) 93% center no-repeat;
+.object-tools a:focus{
+    text-decoration: none;
+}
+
+.object-tools a.viewsitelink, .object-tools a.golink,.object-tools a.addlink {
+    background-repeat: no-repeat;
+    background-position: 93% center;
     padding-right: 26px;
 }
 
+.object-tools a.viewsitelink, .object-tools a.golink {
+    background-image: url(../img/tooltag-arrowright.svg);
+}
+
 .object-tools a.addlink {
-    background: #999 url(../img/tooltag-add.svg) 93% center no-repeat;
-    padding-right: 26px;
+    background-image: url(../img/tooltag-add.svg);
 }
 
 /* OBJECT HISTORY */
@@ -769,7 +764,6 @@ table#change-history tbody th {
 
 #content {
     padding: 20px 40px;
-    margin: 0;
 }
 
 .dashboard #content {
@@ -796,17 +790,17 @@ table#change-history tbody th {
 /* COLUMN TYPES */
 
 .colMS {
-    margin-right: 20em !important;
+    margin-right: 300px;
 }
 
 .colSM {
-    margin-left: 20em !important;
+    margin-left: 300px;
 }
 
 .colSM #content-related {
     float: left;
     margin-right: 0;
-    margin-left: -19em;
+    margin-left: -300px;
 }
 
 .colSM #content-main {
@@ -816,13 +810,6 @@ table#change-history tbody th {
 .popup .colM {
     width: auto;
 }
-
-.subcol {
-    float: left;
-    width: 46%;
-    margin-right: 15px;
-}
-
 
 /* HEADER */
 
@@ -840,7 +827,7 @@ table#change-history tbody th {
     color: #fff;
 }
 
-#header a:hover {
+#header a:focus , #header a:hover {
     text-decoration: underline;
 }
 
@@ -887,7 +874,7 @@ table#change-history tbody th {
     border-bottom: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-#user-tools a:hover {
+#user-tools a:focus, #user-tools a:hover {
     text-decoration: none;
     border-bottom-color: #79aec8;
     color: #79aec8;
@@ -947,6 +934,7 @@ table#change-history tbody th {
 }
 
 .delete-confirmation form input[type="submit"]:active,
+.delete-confirmation form input[type="submit"]:focus,
 .delete-confirmation form input[type="submit"]:hover {
     background: #a41515;
 }
@@ -964,10 +952,10 @@ table#change-history tbody th {
 }
 
 .delete-confirmation form .cancel-link:active,
+.delete-confirmation form .cancel-link:focus,
 .delete-confirmation form .cancel-link:hover {
     background: #ccc;
 }
-
 
 /* POPUP */
 .popup #content {

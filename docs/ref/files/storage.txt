@@ -1,10 +1,11 @@
+================
 File storage API
 ================
 
 .. module:: django.core.files.storage
 
 Getting the current storage class
----------------------------------
+=================================
 
 Django provides two convenient ways to access the current storage class:
 
@@ -26,8 +27,8 @@ Django provides two convenient ways to access the current storage class:
     given path and will return it if successful. An exception will be
     raised if the import is unsuccessful.
 
-The FileSystemStorage Class
----------------------------
+The ``FileSystemStorage`` class
+===============================
 
 .. class:: FileSystemStorage(location=None, base_url=None, file_permissions_mode=None, directory_permissions_mode=None)
 
@@ -61,8 +62,8 @@ The FileSystemStorage Class
         The ``FileSystemStorage.delete()`` method will not raise
         an exception if the given file name does not exist.
 
-The Storage Class
------------------
+The ``Storage`` class
+=====================
 
 .. class:: Storage
 
@@ -118,10 +119,6 @@ The Storage Class
         7 character alphanumeric string is appended to the filename before
         the extension.
 
-        .. versionchanged:: 1.8
-
-            The ``max_length`` argument was added.
-
     .. method:: get_valid_name(name)
 
         Returns a filename based on the ``name`` parameter that's suitable
@@ -167,10 +164,6 @@ The Storage Class
         The ``content`` argument must be an instance of
         :class:`django.core.files.File` or of a subclass of
         :class:`~django.core.files.File`.
-
-        .. versionchanged:: 1.8
-
-            The ``max_length`` argument was added.
 
     .. method:: size(name)
 

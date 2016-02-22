@@ -38,6 +38,9 @@ class MigrationQuestioner(object):
         except LookupError:         # It's a fake app.
             return self.defaults.get("ask_initial", False)
         migrations_import_path = MigrationLoader.migrations_module(app_config.label)
+        if migrations_import_path is None:
+            # It's an application with migrations disabled.
+            return self.defaults.get("ask_initial", False)
         try:
             migrations_module = importlib.import_module(migrations_import_path)
         except ImportError:
@@ -148,8 +151,8 @@ class InteractiveMigrationQuestioner(MigrationQuestioner):
                 [
                     "Provide a one-off default now (will be set on all existing rows)",
                     ("Ignore for now, and let me handle existing rows with NULL myself "
-                     "(e.g. adding a RunPython or RunSQL operation in the new migration "
-                     "file before the AlterField operation)"),
+                     "(e.g. because you added a RunPython or RunSQL operation to handle "
+                     "NULL values in a previous data migration)"),
                     "Quit, and let me add a default in models.py",
                 ]
             )

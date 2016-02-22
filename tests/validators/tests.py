@@ -10,18 +10,19 @@ from unittest import TestCase
 
 from django.core.exceptions import ValidationError
 from django.core.validators import (
-    BaseValidator, EmailValidator, MaxLengthValidator, MaxValueValidator,
-    MinLengthValidator, MinValueValidator, RegexValidator, URLValidator,
-    int_list_validator, validate_comma_separated_integer_list, validate_email,
-    validate_integer, validate_ipv4_address, validate_ipv6_address,
-    validate_ipv46_address, validate_slug, validate_unicode_slug,
+    BaseValidator, DecimalValidator, EmailValidator, MaxLengthValidator,
+    MaxValueValidator, MinLengthValidator, MinValueValidator, RegexValidator,
+    URLValidator, int_list_validator, validate_comma_separated_integer_list,
+    validate_email, validate_integer, validate_ipv4_address,
+    validate_ipv6_address, validate_ipv46_address, validate_slug,
+    validate_unicode_slug,
 )
 from django.test import SimpleTestCase
 from django.test.utils import str_prefix
 from django.utils._os import upath
 
 NOW = datetime.now()
-EXTENDED_SCHEMES = ['http', 'https', 'ftp', 'ftps', 'git', 'file']
+EXTENDED_SCHEMES = ['http', 'https', 'ftp', 'ftps', 'git', 'file', 'git+ssh']
 
 TEST_DATA = [
     # (validator, value, expected),
@@ -171,6 +172,11 @@ TEST_DATA = [
     (validate_comma_separated_integer_list, '1,,2', ValidationError),
 
     (int_list_validator(sep='.'), '1.2.3', None),
+    (int_list_validator(sep='.', allow_negative=True), '1.2.3', None),
+    (int_list_validator(allow_negative=True), '-1,-2,3', None),
+    (int_list_validator(allow_negative=True), '1,-2,-12', None),
+
+    (int_list_validator(), '-1,2,3', ValidationError),
     (int_list_validator(sep='.'), '1,2,3', ValidationError),
     (int_list_validator(sep='.'), '1.2.3\n', ValidationError),
 
@@ -204,6 +210,7 @@ TEST_DATA = [
 
     (URLValidator(EXTENDED_SCHEMES), 'file://localhost/path', None),
     (URLValidator(EXTENDED_SCHEMES), 'git://example.com/', None),
+    (URLValidator(EXTENDED_SCHEMES), 'git+ssh://git@github.com/example/hg-git.git', None),
 
     (URLValidator(EXTENDED_SCHEMES), 'git://-invalid.com', ValidationError),
     # Trailing newlines not accepted
@@ -399,5 +406,23 @@ class TestValidatorEquality(TestCase):
         )
         self.assertNotEqual(
             MinValueValidator(45),
+            MinValueValidator(11),
+        )
+
+    def test_decimal_equality(self):
+        self.assertEqual(
+            DecimalValidator(1, 2),
+            DecimalValidator(1, 2),
+        )
+        self.assertNotEqual(
+            DecimalValidator(1, 2),
+            DecimalValidator(1, 1),
+        )
+        self.assertNotEqual(
+            DecimalValidator(1, 2),
+            DecimalValidator(2, 2),
+        )
+        self.assertNotEqual(
+            DecimalValidator(1, 2),
             MinValueValidator(11),
         )

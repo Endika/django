@@ -12,7 +12,7 @@ from django.utils.encoding import force_str
 
 class Command(BaseCommand):
     help = "Change a user's password for django.contrib.auth."
-
+    requires_migrations_checks = True
     requires_system_checks = False
 
     def _get_pass(self, prompt="Password: "):
@@ -60,7 +60,7 @@ class Command(BaseCommand):
             try:
                 validate_password(p2, u)
             except ValidationError as err:
-                self.stdout.write(', '.join(err.messages))
+                self.stderr.write('\n'.join(err.messages))
                 count += 1
             else:
                 password_validated = True

@@ -23,6 +23,7 @@ class NotRunningInTTYException(Exception):
 
 class Command(BaseCommand):
     help = 'Used to create a superuser.'
+    requires_migrations_checks = True
 
     def __init__(self, *args, **kwargs):
         super(Command, self).__init__(*args, **kwargs)
@@ -33,7 +34,8 @@ class Command(BaseCommand):
         parser.add_argument('--%s' % self.UserModel.USERNAME_FIELD,
             dest=self.UserModel.USERNAME_FIELD, default=None,
             help='Specifies the login for the superuser.')
-        parser.add_argument('--noinput', action='store_false', dest='interactive', default=True,
+        parser.add_argument('--noinput', '--no-input',
+            action='store_false', dest='interactive', default=True,
             help=('Tells Django to NOT prompt the user for input of any kind. '
                   'You must use --%s with --noinput, along with an option for '
                   'any other required field. Superusers created with --noinput will '
@@ -152,7 +154,7 @@ class Command(BaseCommand):
                     try:
                         validate_password(password2, self.UserModel(**fake_user_data))
                     except exceptions.ValidationError as err:
-                        self.stderr.write(', '.join(err.messages))
+                        self.stderr.write('\n'.join(err.messages))
                         password = None
 
             except KeyboardInterrupt:

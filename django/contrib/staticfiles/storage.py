@@ -166,12 +166,15 @@ class HashedFilesMixin(object):
             name_parts = name.split(os.sep)
             # Using posix normpath here to remove duplicates
             url = posixpath.normpath(url)
-            url_parts = url.split('/')
-            parent_level, sub_level = url.count('..'), url.count('/')
-            if url.startswith('/'):
+            # Strip off the fragment so that a path-like fragment won't confuse
+            # the lookup.
+            url_path, fragment = urldefrag(url)
+            url_parts = url_path.split('/')
+            parent_level, sub_level = url_path.count('..'), url_path.count('/')
+            if url_path.startswith('/'):
                 sub_level -= 1
                 url_parts = url_parts[1:]
-            if parent_level or not url.startswith('/'):
+            if parent_level or not url_path.startswith('/'):
                 start, end = parent_level + 1, parent_level
             else:
                 if sub_level:
@@ -183,7 +186,9 @@ class HashedFilesMixin(object):
             joined_result = '/'.join(name_parts[:-start] + url_parts[end:])
             hashed_url = self.url(unquote(joined_result), force=True)
             file_name = hashed_url.split('/')[-1:]
-            relative_url = '/'.join(url.split('/')[:-1] + file_name)
+            relative_url = '/'.join(url_path.split('/')[:-1] + file_name)
+            if fragment:
+                relative_url += '?#%s' % fragment if '?#' in url else '#%s' % fragment
 
             # Return the hashed version to the file
             return template % unquote(relative_url)
@@ -212,11 +217,15 @@ class HashedFilesMixin(object):
         hashed_files = OrderedDict()
 
         # build a list of adjustable files
-        matches = lambda path: matches_patterns(path, self._patterns.keys())
-        adjustable_paths = [path for path in paths if matches(path)]
+        adjustable_paths = [
+            path for path in paths
+            if matches_patterns(path, self._patterns.keys())
+        ]
 
         # then sort the files by the directory level
-        path_level = lambda name: len(name.split(os.sep))
+        def path_level(name):
+            return len(name.split(os.sep))
+
         for name in sorted(paths.keys(), key=path_level, reverse=True):
 
             # use the original, local file, not the copied-but-unprocessed

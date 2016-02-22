@@ -5,15 +5,12 @@ import time
 from datetime import datetime
 
 from django.conf import settings
-from django.template import Context, engines
+from django.template import engines
 from django.template.response import (
     ContentNotRenderedError, SimpleTemplateResponse, TemplateResponse,
 )
-from django.test import (
-    RequestFactory, SimpleTestCase, ignore_warnings, override_settings,
-)
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.test.utils import require_jinja2
-from django.utils.deprecation import RemovedInDjango110Warning
 
 from .utils import TEMPLATE_DIR
 
@@ -80,7 +77,8 @@ class SimpleTemplateResponseTest(SimpleTestCase):
         def iteration():
             for x in response:
                 pass
-        self.assertRaises(ContentNotRenderedError, iteration)
+        with self.assertRaises(ContentNotRenderedError):
+            iteration()
         self.assertFalse(response.is_rendered)
 
     def test_iteration_rendered(self):
@@ -93,7 +91,8 @@ class SimpleTemplateResponseTest(SimpleTestCase):
         # unrendered response raises an exception when content is accessed
         response = self._response()
         self.assertFalse(response.is_rendered)
-        self.assertRaises(ContentNotRenderedError, lambda: response.content)
+        with self.assertRaises(ContentNotRenderedError):
+            response.content
         self.assertFalse(response.is_rendered)
 
     def test_content_access_rendered(self):
@@ -115,14 +114,6 @@ class SimpleTemplateResponseTest(SimpleTestCase):
         response = self._response('{{ foo }}{{ processors }}',
                                   {'foo': 'bar'})
         self.assertEqual(response.context_data, {'foo': 'bar'})
-        response.render()
-        self.assertEqual(response.content, b'bar')
-
-    @ignore_warnings(category=RemovedInDjango110Warning)
-    def test_context_instance(self):
-        response = self._response('{{ foo }}{{ processors }}',
-                                  Context({'foo': 'bar'}))
-        self.assertEqual(response.context_data.__class__, Context)
         response.render()
         self.assertEqual(response.content, b'bar')
 
@@ -166,13 +157,13 @@ class SimpleTemplateResponseTest(SimpleTestCase):
 
     def test_pickling(self):
         # Create a template response. The context is
-        # known to be unpickleable (e.g., a function).
+        # known to be unpicklable (e.g., a function).
         response = SimpleTemplateResponse('first/test.html', {
             'value': 123,
             'fn': datetime.now,
         })
-        self.assertRaises(ContentNotRenderedError,
-                          pickle.dumps, response)
+        with self.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
 
         # But if we render the response, we can pickle it.
         response.render()
@@ -199,8 +190,8 @@ class SimpleTemplateResponseTest(SimpleTestCase):
             'value': 123,
             'fn': datetime.now,
         })
-        self.assertRaises(ContentNotRenderedError,
-                          pickle.dumps, response)
+        with self.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
 
         response.render()
         pickled_response = pickle.dumps(response)
@@ -248,12 +239,6 @@ class TemplateResponseTest(SimpleTestCase):
                                   {'foo': 'bar'}).render()
         self.assertEqual(response.content, b'baryes')
 
-    @ignore_warnings(category=RemovedInDjango110Warning)
-    def test_render_with_context(self):
-        response = self._response('{{ foo }}{{ processors }}',
-                                  Context({'foo': 'bar'})).render()
-        self.assertEqual(response.content, b'bar')
-
     def test_context_processor_priority(self):
         # context processors should be overridden by passed-in context
         response = self._response('{{ foo }}{{ processors }}',
@@ -282,22 +267,18 @@ class TemplateResponseTest(SimpleTestCase):
         response = TemplateResponse(request, 'template_tests/using.html', using='jinja2').render()
         self.assertEqual(response.content, b'Jinja2\n')
 
-    @ignore_warnings(category=RemovedInDjango110Warning)
-    def test_custom_app(self):
-        self._response('{{ foo }}', current_app="foobar")
-        self.assertEqual(self._request.current_app, 'foobar')
-
     def test_pickling(self):
         # Create a template response. The context is
-        # known to be unpickleable (e.g., a function).
-        response = TemplateResponse(self.factory.get('/'),
+        # known to be unpicklable (e.g., a function).
+        response = TemplateResponse(
+            self.factory.get('/'),
             'first/test.html', {
                 'value': 123,
                 'fn': datetime.now,
             }
         )
-        self.assertRaises(ContentNotRenderedError,
-                          pickle.dumps, response)
+        with self.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
 
         # But if we render the response, we can pickle it.
         response.render()
@@ -310,8 +291,12 @@ class TemplateResponseTest(SimpleTestCase):
 
         # ...and the unpickled response doesn't have the
         # template-related attributes, so it can't be re-rendered
-        template_attrs = ('template_name', 'context_data',
-            '_post_render_callbacks', '_request', '_current_app')
+        template_attrs = (
+            'template_name',
+            'context_data',
+            '_post_render_callbacks',
+            '_request',
+        )
         for attr in template_attrs:
             self.assertFalse(hasattr(unpickled_response, attr))
 
@@ -325,8 +310,8 @@ class TemplateResponseTest(SimpleTestCase):
             'value': 123,
             'fn': datetime.now,
         })
-        self.assertRaises(ContentNotRenderedError,
-                          pickle.dumps, response)
+        with self.assertRaises(ContentNotRenderedError):
+            pickle.dumps(response)
 
         response.render()
         pickled_response = pickle.dumps(response)
@@ -344,7 +329,6 @@ class CustomURLConfTest(SimpleTestCase):
 
     def test_custom_urlconf(self):
         response = self.client.get('/template_response_view/')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'This is where you can find the snark: /snark/')
 
 

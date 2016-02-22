@@ -1,16 +1,19 @@
 import os
 
+from admin_scripts.tests import AdminScriptTestCase
+
 from django.apps import apps
 from django.core import management
 from django.core.management import BaseCommand, CommandError, find_commands
 from django.core.management.utils import find_command, popen_wrapper
 from django.db import connection
-from django.test import SimpleTestCase, ignore_warnings, override_settings
-from django.test.utils import captured_stderr, captured_stdout, extend_sys_path
+from django.test import SimpleTestCase, mock, override_settings
+from django.test.utils import captured_stderr, extend_sys_path
 from django.utils import translation
 from django.utils._os import upath
-from django.utils.deprecation import RemovedInDjango110Warning
 from django.utils.six import StringIO
+
+from .management.commands import dance
 
 
 # A minimal set of apps to avoid system checks running on all apps.
@@ -43,7 +46,8 @@ class CommandTests(SimpleTestCase):
 
     def test_explode(self):
         """ Test that an unknown command raises CommandError """
-        self.assertRaises(CommandError, management.call_command, ('explode',))
+        with self.assertRaises(CommandError):
+            management.call_command(('explode',))
 
     def test_system_exit(self):
         """ Exception raised in a command should raise CommandError with
@@ -104,19 +108,13 @@ class CommandTests(SimpleTestCase):
         self.assertNotIn("opt_3", out.getvalue())
         self.assertNotIn("opt-3", out.getvalue())
 
-    @ignore_warnings(category=RemovedInDjango110Warning)
-    def test_optparse_compatibility(self):
+    def test_call_command_option_parsing_non_string_arg(self):
         """
-        optparse should be supported during Django 1.8/1.9 releases.
+        It should be possible to pass non-string arguments to call_command.
         """
         out = StringIO()
-        management.call_command('optparse_cmd', stdout=out)
-        self.assertEqual(out.getvalue(), "All right, let's dance Rock'n'Roll.\n")
-
-        # Simulate command line execution
-        with captured_stdout() as stdout, captured_stderr():
-            management.execute_from_command_line(['django-admin', 'optparse_cmd'])
-        self.assertEqual(stdout.getvalue(), "All right, let's dance Rock'n'Roll.\n")
+        management.call_command('dance', 1, verbosity=0, stdout=out)
+        self.assertIn("You passed 1 as a positional argument.", out.getvalue())
 
     def test_calling_a_command_with_only_empty_parameter_should_ends_gracefully(self):
         out = StringIO()
@@ -165,8 +163,39 @@ class CommandTests(SimpleTestCase):
         finally:
             BaseCommand.check = saved_check
 
+    def test_check_migrations(self):
+        requires_migrations_checks = dance.Command.requires_migrations_checks
+        self.assertEqual(requires_migrations_checks, False)
+        try:
+            with mock.patch.object(BaseCommand, 'check_migrations') as check_migrations:
+                management.call_command('dance', verbosity=0)
+                self.assertFalse(check_migrations.called)
+                dance.Command.requires_migrations_checks = True
+                management.call_command('dance', verbosity=0)
+                self.assertTrue(check_migrations.called)
+        finally:
+            dance.Command.requires_migrations_checks = requires_migrations_checks
+
+
+class CommandRunTests(AdminScriptTestCase):
+    """
+    Tests that need to run by simulating the command line, not by call_command.
+    """
+    def tearDown(self):
+        self.remove_settings('settings.py')
+
+    def test_script_prefix_set_in_commands(self):
+        self.write_settings('settings.py', apps=['user_commands'], sdict={
+            'ROOT_URLCONF': '"user_commands.urls"',
+            'FORCE_SCRIPT_NAME': '"/PREFIX/"',
+        })
+        out, err = self.run_manage(['reverse_url'])
+        self.assertNoOutput(err)
+        self.assertEqual(out.strip(), '/PREFIX/some/url/')
+
 
 class UtilsTests(SimpleTestCase):
 
     def test_no_existent_external_program(self):
-        self.assertRaises(CommandError, popen_wrapper, ['a_42_command_that_doesnt_exist_42'])
+        with self.assertRaises(CommandError):
+            popen_wrapper(['a_42_command_that_doesnt_exist_42'])

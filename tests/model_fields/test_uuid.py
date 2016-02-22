@@ -47,13 +47,11 @@ class TestSaveLoad(TestCase):
             PrimaryKeyUUIDModel.objects.get(pk=[])
 
     def test_wrong_value(self):
-        self.assertRaisesMessage(
-            ValueError, 'badly formed hexadecimal UUID string',
-            UUIDModel.objects.get, field='not-a-uuid')
+        with self.assertRaisesMessage(ValueError, 'badly formed hexadecimal UUID string'):
+            UUIDModel.objects.get(field='not-a-uuid')
 
-        self.assertRaisesMessage(
-            ValueError, 'badly formed hexadecimal UUID string',
-            UUIDModel.objects.create, field='not-a-uuid')
+        with self.assertRaisesMessage(ValueError, 'badly formed hexadecimal UUID string'):
+            UUIDModel.objects.create(field='not-a-uuid')
 
 
 class TestMigrations(SimpleTestCase):
@@ -86,7 +84,10 @@ class TestQuerying(TestCase):
 
 
 class TestSerialization(SimpleTestCase):
-    test_data = '[{"fields": {"field": "550e8400-e29b-41d4-a716-446655440000"}, "model": "model_fields.uuidmodel", "pk": null}]'
+    test_data = (
+        '[{"fields": {"field": "550e8400-e29b-41d4-a716-446655440000"}, '
+        '"model": "model_fields.uuidmodel", "pk": null}]'
+    )
 
     def test_dumping(self):
         instance = UUIDModel(field=uuid.UUID('550e8400e29b41d4a716446655440000'))

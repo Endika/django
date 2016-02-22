@@ -20,10 +20,7 @@ from django.core import checks, exceptions, validators
 # purposes.
 from django.core.exceptions import FieldDoesNotExist  # NOQA
 from django.db import connection, connections, router
-from django.db.models.lookups import (
-    Lookup, RegisterLookupMixin, Transform, default_lookups,
-)
-from django.db.models.query_utils import QueryWrapper
+from django.db.models.query_utils import QueryWrapper, RegisterLookupMixin
 from django.utils import six, timezone
 from django.utils.datastructures import DictWrapper
 from django.utils.dateparse import (
@@ -45,14 +42,14 @@ from django.utils.translation import ugettext_lazy as _
 # Avoid "TypeError: Item in ``from list'' not a string" -- unicode_literals
 # makes these strings unicode
 __all__ = [str(x) for x in (
-    'AutoField', 'BLANK_CHOICE_DASH', 'BigIntegerField', 'BinaryField',
-    'BooleanField', 'CharField', 'CommaSeparatedIntegerField', 'DateField',
-    'DateTimeField', 'DecimalField', 'DurationField', 'EmailField', 'Empty',
-    'Field', 'FieldDoesNotExist', 'FilePathField', 'FloatField',
-    'GenericIPAddressField', 'IPAddressField', 'IntegerField', 'NOT_PROVIDED',
-    'NullBooleanField', 'PositiveIntegerField', 'PositiveSmallIntegerField',
-    'SlugField', 'SmallIntegerField', 'TextField', 'TimeField', 'URLField',
-    'UUIDField',
+    'AutoField', 'BLANK_CHOICE_DASH', 'BigAutoField', 'BigIntegerField',
+    'BinaryField', 'BooleanField', 'CharField', 'CommaSeparatedIntegerField',
+    'DateField', 'DateTimeField', 'DecimalField', 'DurationField',
+    'EmailField', 'Empty', 'Field', 'FieldDoesNotExist', 'FilePathField',
+    'FloatField', 'GenericIPAddressField', 'IPAddressField', 'IntegerField',
+    'NOT_PROVIDED', 'NullBooleanField', 'PositiveIntegerField',
+    'PositiveSmallIntegerField', 'SlugField', 'SmallIntegerField', 'TextField',
+    'TimeField', 'URLField', 'UUIDField',
 )]
 
 
@@ -120,7 +117,6 @@ class Field(RegisterLookupMixin):
         'unique_for_date': _("%(field_label)s must be unique for "
                              "%(date_field_label)s %(lookup_type)s."),
     }
-    class_lookups = default_lookups.copy()
     system_check_deprecated_details = None
     system_check_removed_details = None
 
@@ -221,7 +217,6 @@ class Field(RegisterLookupMixin):
             return [
                 checks.Error(
                     'Field names must not end with an underscore.',
-                    hint=None,
                     obj=self,
                     id='fields.E001',
                 )
@@ -230,7 +225,6 @@ class Field(RegisterLookupMixin):
             return [
                 checks.Error(
                     'Field names must not contain "__".',
-                    hint=None,
                     obj=self,
                     id='fields.E002',
                 )
@@ -239,7 +233,6 @@ class Field(RegisterLookupMixin):
             return [
                 checks.Error(
                     "'pk' is a reserved word that cannot be used as a field name.",
-                    hint=None,
                     obj=self,
                     id='fields.E003',
                 )
@@ -261,7 +254,6 @@ class Field(RegisterLookupMixin):
                 return [
                     checks.Error(
                         "'choices' must be an iterable (e.g., a list or tuple).",
-                        hint=None,
                         obj=self,
                         id='fields.E004',
                     )
@@ -271,9 +263,8 @@ class Field(RegisterLookupMixin):
                      for choice in self.choices):
                 return [
                     checks.Error(
-                        ("'choices' must be an iterable containing "
-                         "(actual value, human readable name) tuples."),
-                        hint=None,
+                        "'choices' must be an iterable containing "
+                        "(actual value, human readable name) tuples.",
                         obj=self,
                         id='fields.E005',
                     )
@@ -288,7 +279,6 @@ class Field(RegisterLookupMixin):
             return [
                 checks.Error(
                     "'db_index' must be None, True or False.",
-                    hint=None,
                     obj=self,
                     id='fields.E006',
                 )
@@ -317,7 +307,7 @@ class Field(RegisterLookupMixin):
     def _check_backend_specific_checks(self, **kwargs):
         app_label = self.model._meta.app_label
         for db in connections:
-            if router.allow_migrate(db, app_label, model=self.model):
+            if router.allow_migrate(db, app_label, model_name=self.model._meta.model_name):
                 return connections[db].validation.check_field(self, **kwargs)
         return []
 
@@ -630,6 +620,14 @@ class Field(RegisterLookupMixin):
         except KeyError:
             return None
 
+    def rel_db_type(self, connection):
+        """
+        Return the data type that a related field pointing to this field should
+        use. For example, this method is called by ForeignKey and OneToOneField
+        to determine its data type.
+        """
+        return self.db_type(connection)
+
     def db_parameters(self, connection):
         """
         Extension of db_type(), providing a range of different return
@@ -736,7 +734,7 @@ class Field(RegisterLookupMixin):
         Perform preliminary non-db specific lookup checks and conversions
         """
         if hasattr(value, '_prepare'):
-            return value._prepare()
+            return value._prepare(self)
 
         if lookup_type in {
             'iexact', 'contains', 'icontains',
@@ -935,7 +933,6 @@ class AutoField(Field):
             return [
                 checks.Error(
                     'AutoFields must set primary_key=True.',
-                    hint=None,
                     obj=self,
                     id='fields.E100',
                 ),
@@ -964,6 +961,9 @@ class AutoField(Field):
                 params={'value': value},
             )
 
+    def rel_db_type(self, connection):
+        return IntegerField().db_type(connection=connection)
+
     def validate(self, value, model_instance):
         pass
 
@@ -988,6 +988,16 @@ class AutoField(Field):
 
     def formfield(self, **kwargs):
         return None
+
+
+class BigAutoField(AutoField):
+    description = _("Big (8 byte) integer")
+
+    def get_internal_type(self):
+        return "BigAutoField"
+
+    def rel_db_type(self, connection):
+        return BigIntegerField().db_type(connection=connection)
 
 
 class BooleanField(Field):
@@ -1086,7 +1096,6 @@ class CharField(Field):
             return [
                 checks.Error(
                     "CharFields must define a 'max_length' attribute.",
-                    hint=None,
                     obj=self,
                     id='fields.E120',
                 )
@@ -1095,7 +1104,6 @@ class CharField(Field):
             return [
                 checks.Error(
                     "'max_length' must be a positive integer.",
-                    hint=None,
                     obj=self,
                     id='fields.E121',
                 )
@@ -1127,6 +1135,17 @@ class CharField(Field):
 class CommaSeparatedIntegerField(CharField):
     default_validators = [validators.validate_comma_separated_integer_list]
     description = _("Comma-separated integers")
+    system_check_deprecated_details = {
+        'msg': (
+            'CommaSeparatedIntegerField has been deprecated. Support '
+            'for it (except in historical migrations) will be removed '
+            'in Django 2.0.'
+        ),
+        'hint': (
+            'Use CharField(validators=[validate_comma_separated_integer_list]) instead.'
+        ),
+        'id': 'fields.W901',
+    }
 
     def formfield(self, **kwargs):
         defaults = {
@@ -1160,7 +1179,6 @@ class DateTimeCheckMixin(object):
                     "The options auto_now, auto_now_add, and default "
                     "are mutually exclusive. Only one of these options "
                     "may be present.",
-                    hint=None,
                     obj=self,
                     id='fields.E160',
                 )
@@ -1475,22 +1493,6 @@ class DateTimeField(DateField):
         return super(DateTimeField, self).formfield(**defaults)
 
 
-@DateTimeField.register_lookup
-class DateTimeDateTransform(Transform):
-    lookup_name = 'date'
-
-    @cached_property
-    def output_field(self):
-        return DateField()
-
-    def as_sql(self, compiler, connection):
-        lhs, lhs_params = compiler.compile(self.lhs)
-        tzname = timezone.get_current_timezone_name() if settings.USE_TZ else None
-        sql, tz_params = connection.ops.datetime_cast_date_sql(lhs, tzname)
-        lhs_params.extend(tz_params)
-        return sql, lhs_params
-
-
 class DecimalField(Field):
     empty_strings_allowed = False
     default_error_messages = {
@@ -1523,7 +1525,6 @@ class DecimalField(Field):
             return [
                 checks.Error(
                     "DecimalFields must define a 'decimal_places' attribute.",
-                    hint=None,
                     obj=self,
                     id='fields.E130',
                 )
@@ -1532,7 +1533,6 @@ class DecimalField(Field):
             return [
                 checks.Error(
                     "'decimal_places' must be a non-negative integer.",
-                    hint=None,
                     obj=self,
                     id='fields.E131',
                 )
@@ -1549,7 +1549,6 @@ class DecimalField(Field):
             return [
                 checks.Error(
                     "DecimalFields must define a 'max_digits' attribute.",
-                    hint=None,
                     obj=self,
                     id='fields.E132',
                 )
@@ -1558,7 +1557,6 @@ class DecimalField(Field):
             return [
                 checks.Error(
                     "'max_digits' must be a positive integer.",
-                    hint=None,
                     obj=self,
                     id='fields.E133',
                 )
@@ -1571,12 +1569,17 @@ class DecimalField(Field):
             return [
                 checks.Error(
                     "'max_digits' must be greater or equal to 'decimal_places'.",
-                    hint=None,
                     obj=self,
                     id='fields.E134',
                 )
             ]
         return []
+
+    @cached_property
+    def validators(self):
+        return super(DecimalField, self).validators + [
+            validators.DecimalValidator(self.max_digits, self.decimal_places)
+        ]
 
     def deconstruct(self):
         name, path, args, kwargs = super(DecimalField, self).deconstruct()
@@ -1744,7 +1747,6 @@ class FilePathField(Field):
             return [
                 checks.Error(
                     "FilePathFields must have either 'allow_files' or 'allow_folders' set to True.",
-                    hint=None,
                     obj=self,
                     id='fields.E140',
                 )
@@ -1964,9 +1966,8 @@ class GenericIPAddressField(Field):
         if not getattr(self, 'null', False) and getattr(self, 'blank', False):
             return [
                 checks.Error(
-                    ('GenericIPAddressFields cannot have blank=True if null=False, '
-                     'as blank values are stored as nulls.'),
-                    hint=None,
+                    'GenericIPAddressFields cannot have blank=True if null=False, '
+                    'as blank values are stored as nulls.',
                     obj=self,
                     id='fields.E150',
                 )
@@ -2086,7 +2087,24 @@ class NullBooleanField(Field):
         return super(NullBooleanField, self).formfield(**defaults)
 
 
-class PositiveIntegerField(IntegerField):
+class PositiveIntegerRelDbTypeMixin(object):
+
+    def rel_db_type(self, connection):
+        """
+        Return the data type that a related field pointing to this field should
+        use. In most cases, a foreign key pointing to a positive integer
+        primary key will have an integer column data type but some databases
+        (e.g. MySQL) have an unsigned integer type. In that case
+        (related_fields_match_type=True), the primary key should return its
+        db_type.
+        """
+        if connection.features.related_fields_match_type:
+            return self.db_type(connection)
+        else:
+            return IntegerField().db_type(connection=connection)
+
+
+class PositiveIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField):
     description = _("Positive integer")
 
     def get_internal_type(self):
@@ -2098,7 +2116,7 @@ class PositiveIntegerField(IntegerField):
         return super(PositiveIntegerField, self).formfield(**defaults)
 
 
-class PositiveSmallIntegerField(IntegerField):
+class PositiveSmallIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField):
     description = _("Positive small integer")
 
     def get_internal_type(self):
@@ -2427,146 +2445,3 @@ class UUIDField(Field):
         }
         defaults.update(kwargs)
         return super(UUIDField, self).formfield(**defaults)
-
-
-class DateTransform(Transform):
-    def as_sql(self, compiler, connection):
-        sql, params = compiler.compile(self.lhs)
-        lhs_output_field = self.lhs.output_field
-        if isinstance(lhs_output_field, DateTimeField):
-            tzname = timezone.get_current_timezone_name() if settings.USE_TZ else None
-            sql, tz_params = connection.ops.datetime_extract_sql(self.lookup_name, sql, tzname)
-            params.extend(tz_params)
-        elif isinstance(lhs_output_field, DateField):
-            sql = connection.ops.date_extract_sql(self.lookup_name, sql)
-        elif isinstance(lhs_output_field, TimeField):
-            sql = connection.ops.time_extract_sql(self.lookup_name, sql)
-        else:
-            raise ValueError('DateTransform only valid on Date/Time/DateTimeFields')
-        return sql, params
-
-    @cached_property
-    def output_field(self):
-        return IntegerField()
-
-
-class YearTransform(DateTransform):
-    lookup_name = 'year'
-
-
-class YearLookup(Lookup):
-    def year_lookup_bounds(self, connection, year):
-        output_field = self.lhs.lhs.output_field
-        if isinstance(output_field, DateTimeField):
-            bounds = connection.ops.year_lookup_bounds_for_datetime_field(year)
-        else:
-            bounds = connection.ops.year_lookup_bounds_for_date_field(year)
-        return bounds
-
-
-@YearTransform.register_lookup
-class YearExact(YearLookup):
-    lookup_name = 'exact'
-
-    def as_sql(self, compiler, connection):
-        # We will need to skip the extract part and instead go
-        # directly with the originating field, that is self.lhs.lhs.
-        lhs_sql, params = self.process_lhs(compiler, connection, self.lhs.lhs)
-        rhs_sql, rhs_params = self.process_rhs(compiler, connection)
-        bounds = self.year_lookup_bounds(connection, rhs_params[0])
-        params.extend(bounds)
-        return '%s BETWEEN %%s AND %%s' % lhs_sql, params
-
-
-class YearComparisonLookup(YearLookup):
-    def as_sql(self, compiler, connection):
-        # We will need to skip the extract part and instead go
-        # directly with the originating field, that is self.lhs.lhs.
-        lhs_sql, params = self.process_lhs(compiler, connection, self.lhs.lhs)
-        rhs_sql, rhs_params = self.process_rhs(compiler, connection)
-        rhs_sql = self.get_rhs_op(connection, rhs_sql)
-        start, finish = self.year_lookup_bounds(connection, rhs_params[0])
-        params.append(self.get_bound(start, finish))
-        return '%s %s' % (lhs_sql, rhs_sql), params
-
-    def get_rhs_op(self, connection, rhs):
-        return connection.operators[self.lookup_name] % rhs
-
-    def get_bound(self):
-        raise NotImplementedError(
-            'subclasses of YearComparisonLookup must provide a get_bound() method'
-        )
-
-
-@YearTransform.register_lookup
-class YearGt(YearComparisonLookup):
-    lookup_name = 'gt'
-
-    def get_bound(self, start, finish):
-        return finish
-
-
-@YearTransform.register_lookup
-class YearGte(YearComparisonLookup):
-    lookup_name = 'gte'
-
-    def get_bound(self, start, finish):
-        return start
-
-
-@YearTransform.register_lookup
-class YearLt(YearComparisonLookup):
-    lookup_name = 'lt'
-
-    def get_bound(self, start, finish):
-        return start
-
-
-@YearTransform.register_lookup
-class YearLte(YearComparisonLookup):
-    lookup_name = 'lte'
-
-    def get_bound(self, start, finish):
-        return finish
-
-
-class MonthTransform(DateTransform):
-    lookup_name = 'month'
-
-
-class DayTransform(DateTransform):
-    lookup_name = 'day'
-
-
-class WeekDayTransform(DateTransform):
-    lookup_name = 'week_day'
-
-
-class HourTransform(DateTransform):
-    lookup_name = 'hour'
-
-
-class MinuteTransform(DateTransform):
-    lookup_name = 'minute'
-
-
-class SecondTransform(DateTransform):
-    lookup_name = 'second'
-
-
-DateField.register_lookup(YearTransform)
-DateField.register_lookup(MonthTransform)
-DateField.register_lookup(DayTransform)
-DateField.register_lookup(WeekDayTransform)
-
-TimeField.register_lookup(HourTransform)
-TimeField.register_lookup(MinuteTransform)
-TimeField.register_lookup(SecondTransform)
-
-DateTimeField.register_lookup(YearTransform)
-DateTimeField.register_lookup(MonthTransform)
-DateTimeField.register_lookup(DayTransform)
-DateTimeField.register_lookup(WeekDayTransform)
-DateTimeField.register_lookup(HourTransform)
-DateTimeField.register_lookup(MinuteTransform)
-DateTimeField.register_lookup(SecondTransform)

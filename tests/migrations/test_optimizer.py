@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from django.db import migrations, models
+from django.db.migrations import operations
 from django.db.migrations.optimizer import MigrationOptimizer
 from django.test import SimpleTestCase
 
@@ -25,9 +26,13 @@ class OptimizerTests(SimpleTestCase):
         expected = [repr(f.deconstruct()) for f in expected]
         self.assertEqual(expected, result)
         if exact is not None and iterations != exact:
-            raise self.failureException("Optimization did not take exactly %s iterations (it took %s)" % (exact, iterations))
+            raise self.failureException(
+                "Optimization did not take exactly %s iterations (it took %s)" % (exact, iterations)
+            )
         if less_than is not None and iterations >= less_than:
-            raise self.failureException("Optimization did not take less than %s iterations (it took %s)" % (less_than, iterations))
+            raise self.failureException(
+                "Optimization did not take less than %s iterations (it took %s)" % (less_than, iterations)
+            )
 
     def assertDoesNotOptimize(self, operations):
         self.assertOptimizesTo(operations, operations)
@@ -280,12 +285,16 @@ class OptimizerTests(SimpleTestCase):
             [
                 migrations.CreateModel("Foo", [("name", models.CharField(max_length=255))]),
                 migrations.CreateModel("LinkThrough", []),
-                migrations.AddField("Foo", "link", models.ManyToManyField("migrations.Link", through="migrations.LinkThrough")),
+                migrations.AddField(
+                    "Foo", "link", models.ManyToManyField("migrations.Link", through="migrations.LinkThrough")
+                ),
             ],
             [
                 migrations.CreateModel("Foo", [("name", models.CharField(max_length=255))]),
                 migrations.CreateModel("LinkThrough", []),
-                migrations.AddField("Foo", "link", models.ManyToManyField("migrations.Link", through="migrations.LinkThrough")),
+                migrations.AddField(
+                    "Foo", "link", models.ManyToManyField("migrations.Link", through="migrations.LinkThrough")
+                ),
             ],
         )
 
@@ -621,5 +630,24 @@ class OptimizerTests(SimpleTestCase):
             ],
             [
                 migrations.CreateModel("Bar", [("width", models.IntegerField())]),
+            ],
+        )
+
+    def test_optimize_elidable_operation(self):
+        elidable_operation = operations.base.Operation()
+        elidable_operation.elidable = True
+        self.assertOptimizesTo(
+            [
+                elidable_operation,
+                migrations.CreateModel("Foo", [("name", models.CharField(max_length=255))]),
+                elidable_operation,
+                migrations.CreateModel("Bar", [("size", models.IntegerField())]),
+                elidable_operation,
+                migrations.RenameModel("Foo", "Phou"),
+                migrations.DeleteModel("Bar"),
+                elidable_operation,
+            ],
+            [
+                migrations.CreateModel("Phou", [("name", models.CharField(max_length=255))]),
             ],
         )

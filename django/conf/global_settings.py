@@ -1,16 +1,21 @@
-# Default Django settings. Override these with settings in the module
-# pointed-to by the DJANGO_SETTINGS_MODULE environment variable.
+# -*- coding: utf-8 -*-
+"""
+Default Django settings. Override these with settings in the module pointed to
+by the DJANGO_SETTINGS_MODULE environment variable.
+"""
+from __future__ import unicode_literals
+
 
 # This is defined here as a do-nothing function because we can't import
 # django.utils.translation -- that module depends on the settings.
-gettext_noop = lambda s: s
+def gettext_noop(s):
+    return s
 
 ####################
 # CORE             #
 ####################
 
 DEBUG = False
-TEMPLATE_DEBUG = False
 
 # Whether the framework should propagate raw exceptions rather than catching
 # them. This is useful under some testing situations and should never be used
@@ -69,6 +74,7 @@ LANGUAGES = [
     ('eo', gettext_noop('Esperanto')),
     ('es', gettext_noop('Spanish')),
     ('es-ar', gettext_noop('Argentinian Spanish')),
+    ('es-co', gettext_noop('Colombian Spanish')),
     ('es-mx', gettext_noop('Mexican Spanish')),
     ('es-ni', gettext_noop('Nicaraguan Spanish')),
     ('es-ve', gettext_noop('Venezuelan Spanish')),
@@ -79,6 +85,7 @@ LANGUAGES = [
     ('fr', gettext_noop('French')),
     ('fy', gettext_noop('Frisian')),
     ('ga', gettext_noop('Irish')),
+    ('gd', gettext_noop('Scottish Gaelic')),
     ('gl', gettext_noop('Galician')),
     ('he', gettext_noop('Hebrew')),
     ('hi', gettext_noop('Hindi')),
@@ -103,7 +110,7 @@ LANGUAGES = [
     ('mn', gettext_noop('Mongolian')),
     ('mr', gettext_noop('Marathi')),
     ('my', gettext_noop('Burmese')),
-    ('nb', gettext_noop('Norwegian Bokmal')),
+    ('nb', gettext_noop('Norwegian Bokmål')),
     ('ne', gettext_noop('Nepali')),
     ('nl', gettext_noop('Dutch')),
     ('nn', gettext_noop('Norwegian Nynorsk')),
@@ -199,34 +206,6 @@ EMAIL_TIMEOUT = None
 # List of strings representing installed apps.
 INSTALLED_APPS = []
 
-# List of locations of the template source files, in search order.
-TEMPLATE_DIRS = []
-
-# List of callables that know how to import templates from various sources.
-# See the comments in django/core/template/loader.py for interface
-# documentation.
-TEMPLATE_LOADERS = [
-    'django.template.loaders.filesystem.Loader',
-    'django.template.loaders.app_directories.Loader',
-]
-
-# List of processors used by RequestContext to populate the context.
-# Each one should be a callable that takes the request object as its
-# only parameter and returns a dictionary to add to the context.
-TEMPLATE_CONTEXT_PROCESSORS = [
-    'django.contrib.auth.context_processors.auth',
-    'django.template.context_processors.debug',
-    'django.template.context_processors.i18n',
-    'django.template.context_processors.media',
-    'django.template.context_processors.static',
-    'django.template.context_processors.tz',
-    # 'django.template.context_processors.request',
-    'django.contrib.messages.context_processors.messages',
-]
-
-# Output to use in template system for invalid (e.g. misspelled) variables.
-TEMPLATE_STRING_IF_INVALID = ''
-
 TEMPLATES = []
 
 # Default email address to use for various automated correspondence from
@@ -259,10 +238,6 @@ FORCE_SCRIPT_NAME = None
 DISALLOWED_USER_AGENTS = []
 
 ABSOLUTE_URL_OVERRIDES = {}
-
-# List of strings representing allowed prefixes for the {% ssi %} tag.
-# Example: ['/home/html', '/var/www']
-ALLOWED_INCLUDE_ROOTS = []
 
 # List of compiled regular expression objects representing URLs that need not
 # be reported by BrokenLinkEmailsMiddleware. Here are a few examples:
@@ -512,9 +487,9 @@ AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
 
 LOGIN_URL = '/accounts/login/'
 
-LOGOUT_URL = '/accounts/logout/'
-
 LOGIN_REDIRECT_URL = '/accounts/profile/'
+
+LOGOUT_REDIRECT_URL = None
 
 # The number of days a password reset link is valid for
 PASSWORD_RESET_TIMEOUT_DAYS = 3

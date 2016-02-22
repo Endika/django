@@ -44,7 +44,8 @@ class ManyToOneNullTests(TestCase):
         self.assertEqual(self.a3.reporter, None)
         # Need to reget a3 to refresh the cache
         a3 = Article.objects.get(pk=self.a3.pk)
-        self.assertRaises(AttributeError, getattr, a3.reporter, 'id')
+        with self.assertRaises(AttributeError):
+            getattr(a3.reporter, 'id')
         # Accessing an article's 'reporter' attribute returns None
         # if the reporter is set to None.
         self.assertEqual(a3.reporter, None)
@@ -71,7 +72,8 @@ class ManyToOneNullTests(TestCase):
     def test_remove_from_wrong_set(self):
         self.assertQuerysetEqual(self.r2.article_set.all(), ['<Article: Fourth>'])
         # Try to remove a4 from a set it does not belong to
-        self.assertRaises(Reporter.DoesNotExist, self.r.article_set.remove, self.a4)
+        with self.assertRaises(Reporter.DoesNotExist):
+            self.r.article_set.remove(self.a4)
         self.assertQuerysetEqual(self.r2.article_set.all(), ['<Article: Fourth>'])
 
     def test_set(self):
@@ -94,7 +96,7 @@ class ManyToOneNullTests(TestCase):
         # Use descriptor assignment to allocate ForeignKey. Null is legal, so
         # existing members of the set that are not in the assignment set are
         # set to null.
-        self.r2.article_set = [self.a2, self.a3]
+        self.r2.article_set.set([self.a2, self.a3])
         self.assertQuerysetEqual(self.r2.article_set.all(),
                                  ['<Article: Second>', '<Article: Third>'])
         # Clear the rest of the set
@@ -106,11 +108,11 @@ class ManyToOneNullTests(TestCase):
     def test_assign_with_queryset(self):
         # Ensure that querysets used in reverse FK assignments are pre-evaluated
         # so their value isn't affected by the clearing operation in
-        # ForeignRelatedObjectsDescriptor.__set__. Refs #19816.
-        self.r2.article_set = [self.a2, self.a3]
+        # RelatedManager.set() (#19816).
+        self.r2.article_set.set([self.a2, self.a3])
 
         qs = self.r2.article_set.filter(headline="Second")
-        self.r2.article_set = qs
+        self.r2.article_set.set(qs)
 
         self.assertEqual(1, self.r2.article_set.count())
         self.assertEqual(1, qs.count())

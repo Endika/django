@@ -11,12 +11,26 @@ class MySQLOperations(BaseSpatialOperations, DatabaseOperations):
 
     mysql = True
     name = 'mysql'
-    select = 'AsText(%s)'
-    from_wkb = 'GeomFromWKB'
-    from_text = 'GeomFromText'
 
     Adapter = WKTAdapter
-    Adaptor = Adapter  # Backwards-compatibility alias.
+
+    @cached_property
+    def select(self):
+        if self.connection.mysql_version < (5, 6, 0):
+            return 'AsText(%s)'
+        return 'ST_AsText(%s)'
+
+    @cached_property
+    def from_wkb(self):
+        if self.connection.mysql_version < (5, 6, 0):
+            return 'GeomFromWKB'
+        return 'ST_GeomFromWKB'
+
+    @cached_property
+    def from_text(self):
+        if self.connection.mysql_version < (5, 6, 0):
+            return 'GeomFromText'
+        return 'ST_GeomFromText'
 
     gis_operators = {
         'bbcontains': SpatialOperator(func='MBRContains'),  # For consistency w/PostGIS API
@@ -33,11 +47,16 @@ class MySQLOperations(BaseSpatialOperations, DatabaseOperations):
         'within': SpatialOperator(func='MBRWithin'),
     }
 
-    function_names = {
-        'Distance': 'ST_Distance',
-        'Length': 'GLength',
-        'Union': 'ST_Union',
-    }
+    @cached_property
+    def function_names(self):
+        return {
+            'Difference': 'ST_Difference',
+            'Distance': 'ST_Distance',
+            'Intersection': 'ST_Intersection',
+            'Length': 'GLength' if self.connection.mysql_version < (5, 6, 0) else 'ST_Length',
+            'SymDifference': 'ST_SymDifference',
+            'Union': 'ST_Union',
+        }
 
     disallowed_aggregates = (
         aggregates.Collect, aggregates.Extent, aggregates.Extent3D,
@@ -48,12 +67,12 @@ class MySQLOperations(BaseSpatialOperations, DatabaseOperations):
     def unsupported_functions(self):
         unsupported = {
             'AsGeoJSON', 'AsGML', 'AsKML', 'AsSVG', 'BoundingCircle',
-            'Difference', 'ForceRHR', 'GeoHash', 'Intersection', 'MemSize',
+            'ForceRHR', 'GeoHash', 'MemSize',
             'Perimeter', 'PointOnSurface', 'Reverse', 'Scale', 'SnapToGrid',
-            'SymDifference', 'Transform', 'Translate',
+            'Transform', 'Translate',
         }
         if self.connection.mysql_version < (5, 6, 1):
-            unsupported.update({'Distance', 'Union'})
+            unsupported.update({'Difference', 'Distance', 'Intersection', 'SymDifference', 'Union'})
         return unsupported
 
     def geo_db_type(self, f):

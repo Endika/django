@@ -1,4 +1,3 @@
-import datetime
 import sys
 import unittest
 
@@ -7,9 +6,9 @@ from django.contrib.admindocs import utils
 from django.contrib.admindocs.views import get_return_data_type
 from django.contrib.auth.models import User
 from django.contrib.sites.models import Site
-from django.core.urlresolvers import reverse
 from django.test import TestCase, modify_settings, override_settings
 from django.test.utils import captured_stderr
+from django.urls import reverse
 
 from .models import Company, Person
 
@@ -18,18 +17,10 @@ class TestDataMixin(object):
 
     @classmethod
     def setUpTestData(cls):
-        # password = "secret"
-        User.objects.create(
-            pk=100, username='super', first_name='Super', last_name='User', email='super@example.com',
-            password='sha1$995a3$6011485ea3834267d719b4c801409b8b1ddd0158', is_active=True, is_superuser=True,
-            is_staff=True, last_login=datetime.datetime(2007, 5, 30, 13, 20, 10),
-            date_joined=datetime.datetime(2007, 5, 30, 13, 20, 10)
-        )
+        cls.superuser = User.objects.create_superuser(username='super', password='secret', email='super@example.com')
 
 
-@override_settings(
-    PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],
-    ROOT_URLCONF='admin_docs.urls')
+@override_settings(ROOT_URLCONF='admin_docs.urls')
 @modify_settings(INSTALLED_APPS={'append': 'django.contrib.admindocs'})
 class AdminDocsTestCase(TestCase):
     pass
@@ -38,8 +29,8 @@ class AdminDocsTestCase(TestCase):
 class MiscTests(AdminDocsTestCase):
 
     def setUp(self):
-        User.objects.create_superuser('super', None, 'secret')
-        self.client.login(username='super', password='secret')
+        superuser = User.objects.create_superuser('super', None, 'secret')
+        self.client.force_login(superuser)
 
     @modify_settings(INSTALLED_APPS={'remove': 'django.contrib.sites'})
     @override_settings(SITE_ID=None)    # will restore SITE_ID after the test
@@ -57,7 +48,7 @@ class MiscTests(AdminDocsTestCase):
 class AdminDocViewTests(TestDataMixin, AdminDocsTestCase):
 
     def setUp(self):
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
 
     def test_index(self):
         self.client.logout()
@@ -65,7 +56,7 @@ class AdminDocViewTests(TestDataMixin, AdminDocsTestCase):
         # Should display the login screen
         self.assertContains(response,
             '<input type="hidden" name="next" value="/admindocs/" />', html=True)
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
         response = self.client.get(reverse('django-admindocs-docroot'))
         self.assertContains(response, '<h1>Documentation</h1>', html=True)
         self.assertContains(response,
@@ -168,7 +159,7 @@ class XViewMiddlewareTest(TestDataMixin, AdminDocsTestCase):
         user = User.objects.get(username='super')
         response = self.client.head('/xview/func/')
         self.assertNotIn('X-View', response)
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
         response = self.client.head('/xview/func/')
         self.assertIn('X-View', response)
         self.assertEqual(response['X-View'], 'admin_docs.views.xview')
@@ -186,7 +177,7 @@ class XViewMiddlewareTest(TestDataMixin, AdminDocsTestCase):
         user = User.objects.get(username='super')
         response = self.client.head('/xview/class/')
         self.assertNotIn('X-View', response)
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
         response = self.client.head('/xview/class/')
         self.assertIn('X-View', response)
         self.assertEqual(response['X-View'], 'admin_docs.views.XViewClass')
@@ -206,7 +197,7 @@ class DefaultRoleTest(AdminDocsTestCase):
 
     def test_parse_rst(self):
         """
-        Tests that ``django.contrib.admindocs.utils.parse_rst`` uses
+        ``django.contrib.admindocs.utils.parse_rst`` should use
         ``cmsreference`` as the default role.
         """
         markup = ('<p><a class="reference external" href="/admindocs/%s">'
@@ -224,7 +215,7 @@ class DefaultRoleTest(AdminDocsTestCase):
 
     def test_publish_parts(self):
         """
-        Tests that Django hasn't broken the default role for interpreted text
+        Django shouldn't break the default role for interpreted text
         when ``publish_parts`` is used directly, by setting it to
         ``cmsreference``. See #6681.
         """
@@ -244,15 +235,15 @@ class TestModelDetailView(TestDataMixin, AdminDocsTestCase):
     """
 
     def setUp(self):
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
         with captured_stderr() as self.docutils_stderr:
-            self.response = self.client.get(reverse('django-admindocs-models-detail', args=['admin_docs', 'person']))
+            self.response = self.client.get(reverse('django-admindocs-models-detail', args=['admin_docs', 'Person']))
 
     def test_method_excludes(self):
         """
-        Test that methods that begin with strings defined in
+        Methods that begin with strings defined in
         ``django.contrib.admindocs.views.MODEL_METHODS_EXCLUDE``
-        do not get displayed in the admin docs
+        should not get displayed in the admin docs.
         """
         self.assertContains(self.response, "<td>get_full_name</td>")
         self.assertNotContains(self.response, "<td>_get_full_name</td>")
@@ -260,6 +251,34 @@ class TestModelDetailView(TestDataMixin, AdminDocsTestCase):
         self.assertNotContains(self.response, "<td>delete_image</td>")
         self.assertNotContains(self.response, "<td>set_status</td>")
         self.assertNotContains(self.response, "<td>save_changes</td>")
+
+    def test_methods_with_arguments(self):
+        """
+        Methods that take arguments should also displayed.
+        """
+        self.assertContains(self.response, "<h3>Methods with arguments</h3>")
+        self.assertContains(self.response, "<td>rename_company</td>")
+        self.assertContains(self.response, "<td>dummy_function</td>")
+        self.assertContains(self.response, "<td>suffix_company_name</td>")
+
+    def test_methods_with_arguments_display_arguments(self):
+        """
+        Methods with arguments should have their arguments displayed.
+        """
+        self.assertContains(self.response, "<td>new_name</td>")
+
+    def test_methods_with_arguments_display_arguments_default_value(self):
+        """
+        Methods with keyword arguments should have their arguments displayed.
+        """
+        self.assertContains(self.response, "<td>suffix=&#39;ltd&#39;</td>")
+
+    def test_methods_with_multiple_arguments_display_arguments(self):
+        """
+        Methods with multiple arguments should have all their arguments
+        displayed, but omitting 'self'.
+        """
+        self.assertContains(self.response, "<td>baz, rox, *some_args, **some_kwargs</td>")
 
     def test_method_data_types(self):
         """
@@ -368,6 +387,9 @@ class TestModelDetailView(TestDataMixin, AdminDocsTestCase):
         self.assertContains(self.response, body, html=True)
         self.assertContains(self.response, model_body, html=True)
 
+    def test_model_detail_title(self):
+        self.assertContains(self.response, '<h1>admin_docs.Person</h1>', html=True)
+
 
 @unittest.skipUnless(utils.docutils_is_available, "no docutils installed.")
 class TestUtils(AdminDocsTestCase):
@@ -454,3 +476,8 @@ class TestUtils(AdminDocsTestCase):
             '</p>\n'
         )
         self.assertHTMLEqual(description_output, description_rendered)
+
+    def test_initial_header_level(self):
+        header = 'should be h3...\n\nHeader\n------\n'
+        output = utils.parse_rst(header, 'header')
+        self.assertIn('<h3>Header</h3>', output)

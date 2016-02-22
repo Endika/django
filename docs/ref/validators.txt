@@ -16,10 +16,14 @@ different types of fields.
 For example, here's a validator that only allows even numbers::
 
     from django.core.exceptions import ValidationError
+    from django.utils.translation import ugettext_lazy as _
 
     def validate_even(value):
         if value % 2 != 0:
-            raise ValidationError('%s is not an even number' % value)
+            raise ValidationError(
+                _('%(value)s is not an even number'),
+                params={'value': value},
+            )
 
 You can add this to a model field via the field's :attr:`~django.db.models.Field.validators`
 argument::
@@ -159,14 +163,9 @@ to, or in lieu of custom ``field.clean()`` methods.
 
         URL/URI scheme list to validate against. If not provided, the default
         list is ``['http', 'https', 'ftp', 'ftps']``. As a reference, the IANA
-        Web site provides a full list of `valid URI schemes`_.
+        website provides a full list of `valid URI schemes`_.
 
         .. _valid URI schemes: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-
-    .. versionchanged:: 1.8
-
-        Support for IPv6 addresses, unicode domains, and URLs containing
-        authentication data was added.
 
 ``validate_email``
 ------------------
@@ -227,12 +226,17 @@ to, or in lieu of custom ``field.clean()`` methods.
 ``int_list_validator``
 ----------------------
 
-.. function:: int_list_validator(sep=',', message=None, code='invalid')
+.. function:: int_list_validator(sep=',', message=None, code='invalid', allow_negative=False)
 
     .. versionadded:: 1.9
 
-    Returns a :class:`RegexValidator` instance that ensures a string
-    consists of integers separated by ``sep``.
+    Returns a :class:`RegexValidator` instance that ensures a string consists
+    of integers separated by ``sep``. It allows negative integers when
+    ``allow_negative`` is ``True``.
+
+    .. versionchanged:: 1.10
+
+        The ``allow_negative`` parameter was added.
 
 ``MaxValueValidator``
 ---------------------
@@ -242,10 +246,6 @@ to, or in lieu of custom ``field.clean()`` methods.
     Raises a :exc:`~django.core.exceptions.ValidationError` with a code of
     ``'max_value'`` if ``value`` is greater than ``max_value``.
 
-    .. versionchanged:: 1.8
-
-       The ``message`` parameter was added.
-
 ``MinValueValidator``
 ---------------------
 
@@ -253,10 +253,6 @@ to, or in lieu of custom ``field.clean()`` methods.
 
     Raises a :exc:`~django.core.exceptions.ValidationError` with a code of
     ``'min_value'`` if ``value`` is less than ``min_value``.
-
-    .. versionchanged:: 1.8
-
-       The ``message`` parameter was added.
 
 ``MaxLengthValidator``
 ----------------------
@@ -266,10 +262,6 @@ to, or in lieu of custom ``field.clean()`` methods.
     Raises a :exc:`~django.core.exceptions.ValidationError` with a code of
     ``'max_length'`` if the length of ``value`` is greater than ``max_length``.
 
-    .. versionchanged:: 1.8
-
-       The ``message`` parameter was added.
-
 ``MinLengthValidator``
 ----------------------
 
@@ -278,6 +270,18 @@ to, or in lieu of custom ``field.clean()`` methods.
     Raises a :exc:`~django.core.exceptions.ValidationError` with a code of
     ``'min_length'`` if the length of ``value`` is less than ``min_length``.
 
-    .. versionchanged:: 1.8
+``DecimalValidator``
+--------------------
 
-       The ``message`` parameter was added.
+.. class:: DecimalValidator(max_digits, decimal_places)
+
+    .. versionadded:: 1.9
+
+    Raises :exc:`~django.core.exceptions.ValidationError` with the following
+    codes:
+
+    - ``'max_digits'`` if the number of digits is larger than ``max_digits``.
+    - ``'max_decimal_places'`` if the number of decimals is larger than
+      ``decimal_places``.
+    - ``'max_whole_digits'`` if the number of whole digits is larger than
+      the difference between ``max_digits`` and ``decimal_places``.

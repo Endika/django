@@ -6,17 +6,15 @@ from __future__ import unicode_literals
 import copy
 
 from django import forms
-from django.contrib.admin.templatetags.admin_static import static
-from django.core.urlresolvers import reverse
 from django.db.models.deletion import CASCADE
 from django.forms.utils import flatatt
 from django.forms.widgets import RadioFieldRenderer
 from django.template.loader import render_to_string
+from django.urls import reverse
+from django.urls.exceptions import NoReverseMatch
 from django.utils import six
 from django.utils.encoding import force_text
-from django.utils.html import (
-    escape, escapejs, format_html, format_html_join, smart_urlquote,
-)
+from django.utils.html import format_html, format_html_join, smart_urlquote
 from django.utils.safestring import mark_safe
 from django.utils.text import Truncator
 from django.utils.translation import ugettext as _
@@ -32,33 +30,31 @@ class FilteredSelectMultiple(forms.SelectMultiple):
     @property
     def media(self):
         js = ["core.js", "SelectBox.js", "SelectFilter2.js"]
-        return forms.Media(js=[static("admin/js/%s" % path) for path in js])
+        return forms.Media(js=["admin/js/%s" % path for path in js])
 
     def __init__(self, verbose_name, is_stacked, attrs=None, choices=()):
         self.verbose_name = verbose_name
         self.is_stacked = is_stacked
         super(FilteredSelectMultiple, self).__init__(attrs, choices)
 
-    def render(self, name, value, attrs=None, choices=()):
+    def render(self, name, value, attrs=None):
         if attrs is None:
             attrs = {}
         attrs['class'] = 'selectfilter'
         if self.is_stacked:
             attrs['class'] += 'stacked'
-        output = [super(FilteredSelectMultiple, self).render(name, value, attrs, choices)]
-        output.append('<script type="text/javascript">addEvent(window, "load", function(e) {')
-        # TODO: "id_" is hard-coded here. This should instead use the correct
-        # API to determine the ID dynamically.
-        output.append('SelectFilter.init("id_%s", "%s", %s); });</script>\n'
-            % (name, escapejs(self.verbose_name), int(self.is_stacked)))
-        return mark_safe(''.join(output))
+
+        attrs['data-field-name'] = self.verbose_name
+        attrs['data-is-stacked'] = int(self.is_stacked)
+        output = super(FilteredSelectMultiple, self).render(name, value, attrs)
+        return mark_safe(output)
 
 
 class AdminDateWidget(forms.DateInput):
     @property
     def media(self):
         js = ["calendar.js", "admin/DateTimeShortcuts.js"]
-        return forms.Media(js=[static("admin/js/%s" % path) for path in js])
+        return forms.Media(js=["admin/js/%s" % path for path in js])
 
     def __init__(self, attrs=None, format=None):
         final_attrs = {'class': 'vDateField', 'size': '10'}
@@ -71,7 +67,7 @@ class AdminTimeWidget(forms.TimeInput):
     @property
     def media(self):
         js = ["calendar.js", "admin/DateTimeShortcuts.js"]
-        return forms.Media(js=[static("admin/js/%s" % path) for path in js])
+        return forms.Media(js=["admin/js/%s" % path for path in js])
 
     def __init__(self, attrs=None, format=None):
         final_attrs = {'class': 'vTimeField', 'size': '8'}
@@ -197,9 +193,26 @@ class ForeignKeyRawIdWidget(forms.TextInput):
         key = self.rel.get_related_field().name
         try:
             obj = self.rel.model._default_manager.using(self.db).get(**{key: value})
-            return '&nbsp;<strong>%s</strong>' % escape(Truncator(obj).words(14, truncate='...'))
         except (ValueError, self.rel.model.DoesNotExist):
             return ''
+
+        label = '&nbsp;<strong>{}</strong>'
+        text = Truncator(obj).words(14, truncate='...')
+        try:
+            change_url = reverse(
+                '%s:%s_%s_change' % (
+                    self.admin_site.name,
+                    obj._meta.app_label,
+                    obj._meta.object_name.lower(),
+                ),
+                args=(obj.pk,)
+            )
+        except NoReverseMatch:
+            pass  # Admin not registered for target model.
+        else:
+            text = format_html('<a href="{}">{}</a>', change_url, text)
+
+        return format_html(label, text)
 
 
 class ManyToManyRawIdWidget(ForeignKeyRawIdWidget):

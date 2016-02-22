@@ -39,7 +39,7 @@ check function::
             errors.append(
                 Error(
                     'an error',
-                    hint=None,
+                    hint='A hint.',
                     obj=checked_object,
                     id='myapp.E001',
                 )
@@ -99,8 +99,6 @@ make the following call::
         # ... perform compatibility checks and collect errors
         return errors
 
-.. versionadded:: 1.8
-
 You can register "deployment checks" that are only relevant to a production
 settings file like this::
 
@@ -108,8 +106,7 @@ settings file like this::
     def my_check(app_configs, **kwargs):
         ...
 
-These checks will only be run if the :djadminopt:`--deploy` option is passed to
-the :djadmin:`check` command.
+These checks will only be run if the :option:`check --deploy` option is used.
 
 You can also use ``register`` as a function rather than a decorator by
 passing a callable object (usually a function) as the first argument
@@ -121,13 +118,9 @@ The code below is equivalent to the code above::
         ...
     register(my_check, Tags.security, deploy=True)
 
-.. versionchanged:: 1.8
-
-    The ability to use register as a function was added.
-
 .. _field-checking:
 
-Field, Model, and Manager checks
+Field, model, and manager checks
 --------------------------------
 
 In some cases, you won't need to register your check function -- you can
@@ -192,7 +185,7 @@ the only difference is that the check is a classmethod, not an instance method::
             # ... your own checks ...
             return errors
 
-Writing Tests
+Writing tests
 -------------
 
 Messages are comparable. That allows you to easily write tests::
@@ -202,7 +195,7 @@ Messages are comparable. That allows you to easily write tests::
     expected_errors = [
         Error(
             'an error',
-            hint=None,
+            hint='A hint.',
             obj=checked_object,
             id='myapp.E001',
         )
